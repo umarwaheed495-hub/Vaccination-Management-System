@@ -40,7 +40,7 @@ const CreateSchedule = () => {
         recommendedAge: formData.recommendedAge,
       };
 
-      const response = await axios.post('http://localhost:8000/api/v1/vaccinations/add', payload, {
+      const response = await axios.post('/api/v1/vaccinations/add', payload, {
         headers: { "Content-Type": "application/json" },
         withCredentials: true,
       });

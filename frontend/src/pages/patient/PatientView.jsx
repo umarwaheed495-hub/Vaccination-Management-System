@@ -22,7 +22,7 @@ const PatientView = () => {
       setLoadingClinics(true);
       const token = localStorage.getItem('token');
 
-      const response = await axios.get('http://localhost:8000/api/v1/clinics/my-clinics', {
+      const response = await axios.get('/api/v1/clinics/my-clinics', {
         headers: { Authorization: `Bearer ${token}` },
         withCredentials: true,
       });
@@ -60,7 +60,7 @@ const PatientView = () => {
       setLoadingPatients(true);
       const token = localStorage.getItem('token');
 
-      const response = await axios.get(`http://localhost:8000/api/v1/patients/clinic/${clinicId}`, {
+      const response = await axios.get(`/api/v1/patients/clinic/${clinicId}`, {
         headers: { Authorization: `Bearer ${token}` },
         withCredentials: true,
       });
@@ -85,7 +85,7 @@ const PatientView = () => {
         setDeletingId(patientId);
         const token = localStorage.getItem('token');
 
-        await axios.delete(`http://localhost:8000/api/v1/patients/delete/${patientId}`, {
+        await axios.delete(`/api/v1/patients/delete/${patientId}`, {
           headers: { Authorization: `Bearer ${token}` },
           withCredentials: true,
         });

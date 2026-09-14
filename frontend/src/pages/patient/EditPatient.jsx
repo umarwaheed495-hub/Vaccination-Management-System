@@ -42,7 +42,7 @@ const EditPatient = () => {
           });
         } else {
           // Agar direct URL se aya hai toh backend se patient data fetch karein
-          const patientResponse = await axios.get(`http://localhost:8000/api/v1/patients/${patientId}`, {
+          const patientResponse = await axios.get(`/api/v1/patients/${patientId}`, {
             headers: { Authorization: `Bearer ${token}` },
             withCredentials: true,
           });
@@ -84,7 +84,7 @@ const EditPatient = () => {
       const token = localStorage.getItem('token');
 
       const response = await axios.put(
-        `http://localhost:8000/api/v1/patients/update/${patientId}`,
+        `/api/v1/patients/update/${patientId}`,
         formData,
         {
           headers: { Authorization: `Bearer ${token}` },

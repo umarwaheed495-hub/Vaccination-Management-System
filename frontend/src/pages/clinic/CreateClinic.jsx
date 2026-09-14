@@ -72,7 +72,7 @@ const CreateClinic = () => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        'http://localhost:8000/api/v1/clinics/create',
+        '/api/v1/clinics/create',
         {
           ...formData,
           consultationFee: Number(formData.consultationFee),

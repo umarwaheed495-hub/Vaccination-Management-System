@@ -167,7 +167,7 @@ const CreatePatient = () => {
         setLoadingClinics(true);
         const token = localStorage.getItem('token');
 
-        const response = await axios.get('http://localhost:8000/api/v1/clinics/my-clinics', {
+        const response = await axios.get('/api/v1/clinics/my-clinics', {
           headers: { Authorization: `Bearer ${token}` },
           withCredentials: true,
         });
@@ -217,7 +217,7 @@ const CreatePatient = () => {
       const token = localStorage.getItem('token');
 
       const response = await axios.post(
-        'http://localhost:8000/api/v1/patients/add',
+        '/api/v1/patients/add',
         formData,
         {
           headers: { Authorization: `Bearer ${token}` },

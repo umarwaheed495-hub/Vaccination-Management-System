@@ -22,7 +22,7 @@ const ScheduleView = () => {
         return;
       }
 
-      const response = await axios.get(`http://localhost:8000/api/v1/vaccinations/${doctorId}`, {
+      const response = await axios.get(`/api/v1/vaccinations/${doctorId}`, {
         withCredentials: true,
       });
 
@@ -44,7 +44,7 @@ const ScheduleView = () => {
   // Delete Schedule Handler
   const handleDelete = async (id) => {
     try {
-      const response = await axios.delete(`http://localhost:8000/api/v1/vaccinations/delete/${id}`, {
+      const response = await axios.delete(`/api/v1/vaccinations/delete/${id}`, {
         withCredentials: true,
       });
 

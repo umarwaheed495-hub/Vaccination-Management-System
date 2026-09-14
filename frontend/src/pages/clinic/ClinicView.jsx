@@ -25,7 +25,7 @@ const ClinicView = () => {
         setDoctorName(savedName);
       }
 
-      const response = await axios.get('http://localhost:8000/api/v1/clinics/my-clinics', {
+      const response = await axios.get('/api/v1/clinics/my-clinics', {
         headers: { Authorization: `Bearer ${token}` },
         withCredentials: true,
       });
@@ -52,7 +52,7 @@ const ClinicView = () => {
       const token = localStorage.getItem('token');
       
       const response = await axios.patch(
-        `http://localhost:8000/api/v1/clinics/toggle-status/${clinicId}`,
+        `/api/v1/clinics/toggle-status/${clinicId}`,
         {},
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -81,7 +81,7 @@ const ClinicView = () => {
     if (window.confirm("Are you sure you want to delete this clinic?")) {
       try {
         const token = localStorage.getItem('token');
-        await axios.delete(`http://localhost:8000/api/v1/clinics/${id}`, {
+        await axios.delete(`/api/v1/clinics/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
           withCredentials: true,
         });

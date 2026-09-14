@@ -52,7 +52,7 @@ const CreateVaccineBrand = () => {
       setLoading(true);
 
       // Backend API call matching the createBrand controller
-      const response = await axios.post('http://localhost:8000/api/v1/vaccine-brands', {
+      const response = await axios.post('/api/v1/vaccine-brands', {
         vaccineName: formData.vaccineName.trim(),
         brandName: formData.brandName.trim(),
         manufacturer: formData.manufacturer.trim() || 'N/A',

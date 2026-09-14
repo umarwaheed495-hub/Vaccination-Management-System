@@ -108,7 +108,7 @@ const EditClinic = () => {
       try {
         setFetching(true);
         const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
-        const response = await axios.get(`http://localhost:8000/api/v1/clinics/${clinicId}`, {
+        const response = await axios.get(`/api/v1/clinics/${clinicId}`, {
           headers: { Authorization: `Bearer ${token}` },
           withCredentials: true,
         });
@@ -183,7 +183,7 @@ const EditClinic = () => {
     try {
       const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
       const response = await axios.patch(
-        `http://localhost:8000/api/v1/clinics/${clinicId}`,
+        `/api/v1/clinics/${clinicId}`,
         {
           ...formData,
           consultationFee: Number(formData.consultationFee),

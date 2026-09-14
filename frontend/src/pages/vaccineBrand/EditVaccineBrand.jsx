@@ -25,7 +25,7 @@ const EditVaccineBrand = () => {
     const fetchBrandDetails = async () => {
       try {
         setFetching(true);
-        const response = await axios.get(`http://localhost:8000/api/v1/vaccine-brands`, {
+        const response = await axios.get(`/api/v1/vaccine-brands`, {
           withCredentials: true,
         });
         
@@ -93,7 +93,7 @@ const EditVaccineBrand = () => {
       setLoading(true);
 
       // Backend API call matching the updateBrand controller (PATCH method)
-      const response = await axios.patch(`http://localhost:8000/api/v1/vaccine-brands/${id}`, {
+      const response = await axios.patch(`/api/v1/vaccine-brands/${id}`, {
         vaccineName: formData.vaccineName.trim(),
         brandName: formData.brandName.trim(),
         manufacturer: formData.manufacturer.trim() || 'N/A',

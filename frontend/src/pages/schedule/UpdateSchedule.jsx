@@ -33,7 +33,7 @@ const UpdateSchedule = () => {
       const fetchScheduleDetails = async () => {
         try {
           setFetching(true);
-          const response = await axios.get(`http://localhost:8000/api/v1/vaccinations/single/${id}`, {
+          const response = await axios.get(`/api/v1/vaccinations/single/${id}`, {
             withCredentials: true,
           });
 
@@ -71,7 +71,7 @@ const UpdateSchedule = () => {
         recommendedAge: formData.recommendedAge,
       };
 
-      const response = await axios.put(`http://localhost:8000/api/v1/vaccinations/update/${id}`, payload, {
+      const response = await axios.put(`/api/v1/vaccinations/update/${id}`, payload, {
         headers: { "Content-Type": "application/json" },
         withCredentials: true,
       });

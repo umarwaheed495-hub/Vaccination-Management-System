@@ -20,7 +20,7 @@ const VaccineBrandsView = () => {
         params.vaccineName = searchVaccine.trim();
       }
 
-      const response = await axios.get('http://localhost:8000/api/v1/vaccine-brands', {
+      const response = await axios.get('/api/v1/vaccine-brands', {
         params,
         withCredentials: true,
       });
@@ -48,7 +48,7 @@ const VaccineBrandsView = () => {
     if (!window.confirm('Are you sure you want to delete this vaccine brand?')) return;
 
     try {
-      await axios.delete(`http://localhost:8000/api/v1/vaccine-brands/${id}`, {
+      await axios.delete(`/api/v1/vaccine-brands/${id}`, {
         withCredentials: true,
       });
       toast.success('Vaccine brand deleted successfully.');

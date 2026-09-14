@@ -19,7 +19,7 @@ const PatientVaccinationCard = () => {
       setLoading(true);
       const token = localStorage.getItem('token');
 
-      const response = await axios.get(`http://localhost:8000/api/v1/patients/vaccination-card/${patientId}`, {
+      const response = await axios.get(`/api/v1/patients/vaccination-card/${patientId}`, {
         headers: { Authorization: `Bearer ${token}` },
         withCredentials: true,
       });
@@ -51,7 +51,7 @@ const PatientVaccinationCard = () => {
       const token = localStorage.getItem('token');
 
       const response = await axios.patch(
-        `http://localhost:8000/api/v1/patients/vaccination-card/${patientId}/vaccine/${vaccineSubDocId}`,
+        `/api/v1/patients/vaccination-card/${patientId}/vaccine/${vaccineSubDocId}`,
         updatedFields,
         {
           headers: { Authorization: `Bearer ${token}` },

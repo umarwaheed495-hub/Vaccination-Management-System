@@ -38,7 +38,7 @@ const VerifyOtp = () => {
 
         try {
             setIsLoading(true)
-            const res = await axios.post(`http://localhost:8000/api/v1/doctors/verify-otp`, {
+            const res = await axios.post(`/api/v1/doctors/verify-otp`, {
                 email,
                 otp
             })
@@ -66,7 +66,7 @@ const VerifyOtp = () => {
         setErrorMessage("")
         try {
             setIsResending(true)
-            const res = await axios.post(`http://localhost:8000/api/v1/doctors/resend-otp`, { email })
+            const res = await axios.post(`/api/v1/doctors/resend-otp`, { email })
             
             if (res.data.success) {
                 toast.success(res.data.message || "OTP resent to your email!")
