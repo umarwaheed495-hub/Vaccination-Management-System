@@ -1,0 +1,39 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Backend API for Vaccination Management System",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js"
+  },
+  "keywords": [
+    "mern",
+    "nodejs",
+    "express",
+    "mongodb",
+    "redis",
+    "jwt",
+    "authentication",
+    "otp"
+  ],
+  "author": "Umar Waheed",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.9.4",
+    "nodemailer": "^9.0.5",
+    "redis": "^6.2.1",
+    "resend": "^6.22.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
