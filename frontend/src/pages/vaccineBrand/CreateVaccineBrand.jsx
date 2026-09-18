@@ -115,7 +115,7 @@ const CreateVaccineBrand = () => {
               <input
                 type="text"
                 name="vaccineName"
-                placeholder="e.g., BCG, Polio, Hepatitis B"
+                placeholder="Enter the vaccine Name"
                 value={formData.vaccineName}
                 onChange={handleChange}
                 required
@@ -131,7 +131,7 @@ const CreateVaccineBrand = () => {
               <input
                 type="text"
                 name="brandName"
-                placeholder="e.g., Engerix-B, Infanrix"
+                placeholder="Enter Vaccine Brand"
                 value={formData.brandName}
                 onChange={handleChange}
                 required
@@ -149,7 +149,7 @@ const CreateVaccineBrand = () => {
             <input
               type="text"
               name="manufacturer"
-              placeholder="e.g., GSK, Pfizer (Defaults to N/A if left empty)"
+              placeholder="Enter Manufacturer (Defaults to N/A if left empty)"
               value={formData.manufacturer}
               onChange={handleChange}
               className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 text-sm outline-none transition-all"
@@ -168,7 +168,7 @@ const CreateVaccineBrand = () => {
                 name="price"
                 min="0"
                 step="0.01"
-                placeholder="0.00"
+                placeholder="Enter Vaccine Price"
                 value={formData.price}
                 onChange={handleChange}
                 required
@@ -185,7 +185,7 @@ const CreateVaccineBrand = () => {
                 type="number"
                 name="inventory"
                 min="0"
-                placeholder="e.g., 50"
+                placeholder="Enter Vaccine Inventory"
                 value={formData.inventory}
                 onChange={handleChange}
                 required

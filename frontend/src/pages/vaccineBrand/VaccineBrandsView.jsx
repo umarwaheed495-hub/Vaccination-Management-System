@@ -83,26 +83,6 @@ const VaccineBrandsView = () => {
         </Button>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 p-4 rounded-xl">
-        <Search className="w-5 h-5 text-slate-400 ml-1" />
-        <input
-          type="text"
-          placeholder="Filter by Vaccine Name..."
-          value={searchVaccine}
-          onChange={(e) => setSearchVaccine(e.target.value)}
-          className="bg-transparent text-slate-100 placeholder-slate-500 text-sm sm:text-base outline-none w-full"
-        />
-        {searchVaccine && (
-          <button
-            onClick={() => setSearchVaccine('')}
-            className="text-xs text-blue-400 hover:text-blue-300 font-medium px-2 py-1 bg-slate-800 rounded-lg"
-          >
-            Clear
-          </button>
-        )}
-      </div>
-
       {/* Main Content Table / Grid */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         {loading ? (
