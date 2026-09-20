@@ -1,6 +1,7 @@
 import { Patient } from "../models/patient.model.js";
 import { Clinic } from "../models/clinic.model.js";
 import { Vaccination } from "../models/vaccination.model.js";
+import { VaccineBrand } from "../models/vaccineBrand.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -296,6 +297,35 @@ const updatePatient = asyncHandler(async (req, res) => {
 });
 
 // =========================================================================
+// GET VACCINE BRANDS BY SPECIFIC VACCINE NAME
+// =========================================================================
+const getBrandsByVaccineName = asyncHandler(async (req, res) => {
+  const { vaccineName } = req.params; // URL se vaccine name aayega (jaise "Tdap" ya "OPV-I")
+  const doctorId = req.doctor?._id || req.user?._id;
+
+  // 1. Unauthorized Check
+  if (!doctorId) {
+    throw new ApiError(401, "Unauthorized request. Doctor identity missing.");
+  }
+
+  // 2. Strict Input Validation
+  if (!vaccineName || vaccineName.toString().trim() === "") {
+    throw new ApiError(400, "Validation Failed: Vaccine name parameter is required.");
+  }
+
+  // 3. Fetch Brands from DB (Case-insensitive exact match for logged-in doctor)
+  const brands = await VaccineBrand.find({
+    doctorId,
+    vaccineName: { $regex: new RegExp(`^${vaccineName.trim()}$`, "i") },
+  });
+
+  // 4. Send Response
+  return res
+    .status(200)
+    .json(new ApiResponse(200, brands, "Vaccine brands fetched successfully by name."));
+});
+
+// =========================================================================
 // 6. DELETE PATIENT RECORD (With Safety & Confirmation Checks)
 // =========================================================================
 const deletePatient = asyncHandler(async (req, res) => {
@@ -330,5 +360,6 @@ export {
   getPatientVaccinationCard,
   updatePatientVaccineStatus,
   updatePatient,
+  getBrandsByVaccineName,
   deletePatient
 };
