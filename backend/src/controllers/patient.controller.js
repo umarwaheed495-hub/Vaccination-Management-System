@@ -1,6 +1,7 @@
 import { Patient } from "../models/patient.model.js";
 import { Clinic } from "../models/clinic.model.js";
 import { Vaccination } from "../models/vaccination.model.js";
+import { VaccineBrand } from "../models/vaccineBrand.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -128,7 +129,7 @@ const getPatientsByClinic = asyncHandler(async (req, res) => {
 });
 
 // =========================================================================
-// 3. GET PATIENT VACCINATION CARD (Calculates & loads schedule on click)
+// 3. GET PATIENT VACCINATION CARD (Syncs new vaccines with default status)
 // =========================================================================
 const getPatientVaccinationCard = asyncHandler(async (req, res) => {
   const { patientId } = req.params;
@@ -143,11 +144,8 @@ const getPatientVaccinationCard = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Patient not found or unauthorized access.");
   }
 
-  // Doctor ki saari current vaccines fetch karein
   const doctorVaccines = await Vaccination.find({ doctorId });
 
-  // Check karein ke kya patient ke paas pehle se vaccines mapped hain ya nahi, 
-  // ya agar doctor ne nayi vaccine add ki hai toh unhe sync karein
   const updatedPatientVaccines = doctorVaccines.map((vac) => {
     const existingEntry = patient.patientVaccines.find(
       (pv) => pv.scheduleId && pv.scheduleId.toString() === vac._id.toString()
@@ -160,8 +158,10 @@ const getPatientVaccinationCard = asyncHandler(async (req, res) => {
     } else {
       return {
         scheduleId: vac._id,
-        dueDate: calculateDueDate(patient.dateOfBirth, vac.date),
+        dueDate: calculateDueDate(patient.dateOfBirth, vac.recommendedAge),
         givenDate: null,
+        status: "Pending", // Default status for new vaccine records
+        brandName: "",     // Default brand name
       };
     }
   });
@@ -169,7 +169,6 @@ const getPatientVaccinationCard = asyncHandler(async (req, res) => {
   patient.patientVaccines = updatedPatientVaccines;
   await patient.save();
 
-  // Populate karke complete details return karein
   const populatedPatient = await Patient.findById(patientId).populate(
     "patientVaccines.scheduleId"
   );
@@ -180,11 +179,11 @@ const getPatientVaccinationCard = asyncHandler(async (req, res) => {
 });
 
 // =========================================================================
-// 4. UPDATE PATIENT VACCINE GIVEN DATE
+// 4. UPDATE PATIENT VACCINE STATUS, BRAND NAME & GIVEN DATE (Automatic Date Logic)
 // =========================================================================
 const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
   const { patientId, vaccineId } = req.params; 
-  const { givenDate } = req.body;
+  const { status, brandName, givenDate } = req.body;
   const doctorId = req.doctor?._id || req.user?._id;
 
   if (!doctorId) {
@@ -196,7 +195,6 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Patient not found or unauthorized access.");
   }
 
-  // Find the specific vaccine entry in patient's array
   const vaccineEntry = patient.patientVaccines.find(
     (pv) => pv._id.toString() === vaccineId || (pv.scheduleId && pv.scheduleId.toString() === vaccineId)
   );
@@ -205,8 +203,26 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Vaccine record not found in patient's card.");
   }
 
-  if (givenDate !== undefined) {
+  // 1. Status & Automatic Given Date Logic
+  if (status !== undefined) {
+    vaccineEntry.status = status;
+
+    // Agar status "Given" select ho, toh givenDate automatic current date par set ho jaye
+    if (status === "Given") {
+      vaccineEntry.givenDate = givenDate ? new Date(givenDate) : new Date();
+    } else if (status === "Pending") {
+      vaccineEntry.givenDate = null; // Pending hone par date clear ho jaye gi
+    }
+  }
+
+  // Agar user ne manually koi specific givenDate bheji ho aur status "Given" ho
+  if (givenDate !== undefined && status !== "Given") {
     vaccineEntry.givenDate = givenDate ? new Date(givenDate) : null;
+  }
+
+  // 2. Brand Name Update
+  if (brandName !== undefined) {
+    vaccineEntry.brandName = brandName.trim();
   }
 
   await patient.save();
@@ -217,7 +233,7 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, updatedPatient, "Vaccine given date updated successfully."));
+    .json(new ApiResponse(200, updatedPatient, "Vaccine details updated successfully."));
 });
 
 // =========================================================================
@@ -255,7 +271,7 @@ const updatePatient = asyncHandler(async (req, res) => {
 
     // Doctor ki saari vaccines fetch karein taake unka original schedule rule (`vac.date`) mil sake
     const doctorVaccines = await Vaccination.find({ doctorId });
-    const vaccineMap = new Map(doctorVaccines.map(v => [v._id.toString(), v.date]));
+    const vaccineMap = new Map(doctorVaccines.map(vac => [vac._id.toString(), vac.recommendedAge]));
 
     // 3. Har vaccine entry ki due date ko naye DOB ke hisaab se update karein
     updatedPatient.patientVaccines = updatedPatient.patientVaccines.map(vaccine => {
@@ -278,6 +294,35 @@ const updatePatient = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, updatedPatient, "Patient details and vaccination due dates updated successfully."));
+});
+
+// =========================================================================
+// GET VACCINE BRANDS BY SPECIFIC VACCINE NAME
+// =========================================================================
+const getBrandsByVaccineName = asyncHandler(async (req, res) => {
+  const { vaccineName } = req.params; // URL se vaccine name aayega (jaise "Tdap" ya "OPV-I")
+  const doctorId = req.doctor?._id || req.user?._id;
+
+  // 1. Unauthorized Check
+  if (!doctorId) {
+    throw new ApiError(401, "Unauthorized request. Doctor identity missing.");
+  }
+
+  // 2. Strict Input Validation
+  if (!vaccineName || vaccineName.toString().trim() === "") {
+    throw new ApiError(400, "Validation Failed: Vaccine name parameter is required.");
+  }
+
+  // 3. Fetch Brands from DB (Case-insensitive exact match for logged-in doctor)
+  const brands = await VaccineBrand.find({
+    doctorId,
+    vaccineName: { $regex: new RegExp(`^${vaccineName.trim()}$`, "i") },
+  });
+
+  // 4. Send Response
+  return res
+    .status(200)
+    .json(new ApiResponse(200, brands, "Vaccine brands fetched successfully by name."));
 });
 
 // =========================================================================
@@ -315,5 +360,6 @@ export {
   getPatientVaccinationCard,
   updatePatientVaccineStatus,
   updatePatient,
+  getBrandsByVaccineName,
   deletePatient
 };

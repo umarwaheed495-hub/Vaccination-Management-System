@@ -12,7 +12,7 @@ import { resetSuccessEmailTemp } from "../email_templates/resetSuccessEmailTemp.
 import { Vaccination } from "../models/vaccination.model.js";
 import DEFAULT_VACCINATION_SCHEDULE from '../utils/defaultSchedule.js';
 import DEFAULT_VACCINE_BRANDS from '../utils/defaultVaccines.js';
-import VaccineBrand from '../models/vaccineBrand.model.js'; 
+import {VaccineBrand} from '../models/vaccineBrand.model.js'; 
 
 // =========================================================================
 // HELPER FUNCTION: Access aur Refresh Tokens Generate karne ke liye

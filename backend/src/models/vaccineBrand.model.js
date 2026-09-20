@@ -36,6 +36,6 @@ const vaccineBrandSchema = new mongoose.Schema({
 
 vaccineBrandSchema.index({ doctorId: 1, vaccineName: 1 });
 
-const VaccineBrand = mongoose.model('VaccineBrand', vaccineBrandSchema);
+export const VaccineBrand = mongoose.model('VaccineBrand', vaccineBrandSchema);
 
-export default VaccineBrand;
+ 

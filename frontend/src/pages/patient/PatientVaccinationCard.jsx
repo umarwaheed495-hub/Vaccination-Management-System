@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, ArrowLeft, Calendar, ShieldCheck, User, Phone, CheckCircle2, Clock } from 'lucide-react';
+import { Syringe, ArrowLeft, Calendar, ShieldCheck, User, Phone } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 
@@ -44,7 +44,7 @@ const PatientVaccinationCard = () => {
     }
   }, [patientId]);
 
-  // 2. Update Vaccine Status or Given Date Function (With Error Handling for Out of Stock)
+  // 2. Update Vaccine Given Date Function (Direct quick update)
   const handleVaccineUpdate = async (vaccineSubDocId, updatedFields) => {
     try {
       setUpdatingId(vaccineSubDocId);
@@ -63,32 +63,15 @@ const PatientVaccinationCard = () => {
       if (updatedRecord) {
         setPatientData(updatedRecord);
         setVaccines(updatedRecord.patientVaccines || []);
-        toast.success("Vaccine record and inventory updated successfully!");
+        toast.success("Vaccine record updated successfully!");
       }
     } catch (error) {
       console.error("Failed to update vaccine status:", error);
-      // Backend se jo "Out of Stock" ya error message aayega woh yahan toast mein show ho jayega
       toast.error(error.response?.data?.message || "Failed to update vaccine status.");
-      
-      // Error aane par state ko dobara fetch kar ke sync kar lein taake UI theek rahe
       fetchVaccinationCard();
     } finally {
       setUpdatingId(null);
     }
-  };
-
-  // 3. Status Change Handler (Auto sets today's date if status becomes 'Given')
-  const handleStatusChange = (item, newStatus) => {
-    const payload = { status: newStatus };
-
-    if (newStatus === "Given") {
-      const todayDate = new Date().toISOString().split('T')[0];
-      payload.givenDate = todayDate;
-    } else if (newStatus === "Pending") {
-      payload.givenDate = null;
-    }
-
-    handleVaccineUpdate(item._id, payload);
   };
 
   // Helper: Group vaccines by their Due Date
@@ -114,7 +97,7 @@ const PatientVaccinationCard = () => {
           </button>
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2">
-              <Activity className="w-7 h-7 text-emerald-500" />
+              {/* <Activity className="w-7 h-7 text-emerald-500" /> */}
               <span>Vaccination Card</span>
             </h1>
             <p className="text-slate-400 text-xs sm:text-sm mt-1">
@@ -126,7 +109,6 @@ const PatientVaccinationCard = () => {
 
       {/* Main Content */}
       {loading ? (
-        /* Skeleton Loading UI */
         <div className="space-y-6 animate-pulse">
           <div className="bg-[#0b1329]/90 border border-slate-800/80 rounded-2xl p-5 shadow-xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[1, 2, 3, 4].map((i) => (
@@ -138,20 +120,6 @@ const PatientVaccinationCard = () => {
                 </div>
               </div>
             ))}
-          </div>
-
-          <div className="bg-[#0b1329]/80 border border-slate-800/80 rounded-2xl shadow-xl overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
-              <div className="h-5 bg-slate-800 rounded w-48" />
-              <div className="h-6 bg-slate-800 rounded w-24" />
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="h-8 bg-slate-900/80 rounded-lg w-full" />
-              <div className="space-y-2">
-                <div className="h-10 bg-slate-900/40 rounded-lg w-full" />
-                <div className="h-10 bg-slate-900/40 rounded-lg w-full" />
-              </div>
-            </div>
           </div>
         </div>
       ) : !patientData ? (
@@ -226,12 +194,11 @@ const PatientVaccinationCard = () => {
                 </div>
               ) : (
                 Object.entries(groupedVaccines).map(([dueDate, groupItems], groupIndex) => (
-                  <div 
-                    key={groupIndex} 
+                  <div
+                    key={groupIndex}
                     className="mb-6 bg-slate-900/40 border border-slate-800/80 rounded-2xl shadow-lg overflow-hidden last:mb-0"
                   >
-                    {/* Date Group Header - Shifted to Center */}
-                    <div className="bg-slate-900/90 px-5 py-3 border-b border-slate-800/80 flex items-center justify-center gap-2 text-emerald-400 text-xs font-bold tracking-wider uppercase text-center relative">
+                    <div className="bg-slate-900/90 px-5 py-3 border-b border-slate-800/80 flex items-center justify-center gap-2 text-emerald-400 text-xs font-bold tracking-wider uppercase text-center">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
                         <span>Recommended Due Date: {dueDate}</span>
@@ -239,15 +206,13 @@ const PatientVaccinationCard = () => {
                       </div>
                     </div>
 
-                    {/* Table for this specific Date Group */}
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="border-b border-slate-800/40 bg-slate-900/30 text-xs text-slate-400 uppercase tracking-wider">
-                            <th className="py-3 px-4 font-semibold">Vaccine Name</th>
-                            <th className="py-3 px-4 font-semibold">Brand</th>
-                            <th className="py-3 px-4 font-semibold">Status</th>
                             <th className="py-3 px-4 font-semibold">Given Date</th>
+                            <th className="py-3 px-4 font-semibold">Vaccine Name</th>
+                            <th className="py-3 px-4 font-semibold text-center">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/40 text-sm">
@@ -257,34 +222,6 @@ const PatientVaccinationCard = () => {
 
                             return (
                               <tr key={item._id || index} className="hover:bg-slate-900/45 transition">
-                                {/* Vaccine Name */}
-                                <td className="py-3.5 px-4 font-bold text-white">{vaccineName}</td>
-
-                                {/* Brand Display */}
-                                <td className="py-3.5 px-4 text-slate-300">
-                                  <span className="px-2.5 py-1 bg-slate-800/60 border border-slate-700/60 rounded-lg text-xs font-medium">
-                                    {item.brand || item.scheduleId?.brand || 'Standard'}
-                                  </span>
-                                </td>
-
-                                {/* Status Toggle (Pending / Given) */}
-                                <td className="py-3.5 px-4">
-                                  <select
-                                    disabled={isUpdating}
-                                    value={item.status || "Pending"}
-                                    onChange={(e) => handleStatusChange(item, e.target.value)}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition outline-none cursor-pointer ${
-                                      item.status === "Given"
-                                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                                        : "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                                    }`}
-                                  >
-                                    <option value="Pending" className="bg-[#0b1329] text-amber-400">Pending</option>
-                                    <option value="Given" className="bg-[#0b1329] text-emerald-400">Given</option>
-                                  </select>
-                                </td>
-
-                                {/* Given Date Picker */}
                                 <td className="py-3.5 px-4">
                                   <input
                                     type="date"
@@ -293,6 +230,19 @@ const PatientVaccinationCard = () => {
                                     onChange={(e) => handleVaccineUpdate(item._id, { givenDate: e.target.value })}
                                     className="bg-slate-900/80 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 focus:border-emerald-500 outline-none transition"
                                   />
+                                </td>
+
+                                <td className="py-3.5 px-4 font-bold text-white">{vaccineName}</td>
+
+                                {/* Action Column with Syringe Icon opening Update Page */}
+                                <td className="py-3.5 px-4 text-center">
+                                  <button
+                                    onClick={() => navigate(`/dashboard/update-vaccine/${patientId}/${item._id}`)}
+                                    title="Manage Status & Brand Name on New Page"
+                                    className="p-2 bg-blue-600/15 text-blue-400 hover:bg-blue-600/30 rounded-xl transition border border-blue-500/30 inline-flex items-center justify-center gap-1.5 text-xs font-medium px-3.5"
+                                  >
+                                    <Syringe className="w-4 h-4 text-blue-400" />
+                                  </button>
                                 </td>
                               </tr>
                             );

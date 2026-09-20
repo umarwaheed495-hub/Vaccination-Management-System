@@ -51,7 +51,18 @@ const patientSchema = new Schema(
           type: Date, // Patient ki DOB aur vaccine ki age se calculate hone wali due date
         },
         givenDate: {
-          type: Date, // Jab vaccine lag jaye gi tab ki date
+          type: Date, 
+        },
+       
+        status: {
+          type: String,
+          enum: ["Pending", "Given"], 
+          default: "Pending",
+        },
+        brandName: {
+          type: String,
+          trim: true,
+          default: "",
         },
       },
     ],

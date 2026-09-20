@@ -29,14 +29,13 @@ import PatientView from './pages/patient/PatientView';
 import CreatePatient from './pages/patient/CreatePatient';
 import EditPatient from './pages/patient/EditPatient';
 import PatientVaccinationCard from './pages/patient/PatientVaccinationCard';
+import UpdatePatientVaccine from './pages/patient/UpdatePatientVaccine';
 
 // Vaccine Brand Pages (Naya Import)
 import VaccineBrandsView from './pages/vaccineBrand/VaccineBrandsView';
 import CreateVaccineBrand from './pages/vaccineBrand/CreateVaccineBrand';
 import EditVaccineBrand from './pages/vaccineBrand/EditVaccineBrand';
-// Agar aapke paas Create/Edit ke liye alag components hain toh unhein yahan import kar sakte hain:
-// import CreateVaccineBrand from './pages/vaccineBrand/CreateVaccineBrand';
-// import EditVaccineBrand from './pages/vaccineBrand/EditVaccineBrand';
+
 
 const router = createBrowserRouter([
   // Public Routes
@@ -101,9 +100,13 @@ const router = createBrowserRouter([
             path: "patient-vaccination/:patientId",
             element: <PatientVaccinationCard />,
           },
-          // ==========================================
-          // Naye Vaccine Brand Routes (Added Successfully)
-          // ==========================================
+          {
+            path: "update-vaccine/:patientId/:vaccineId",
+            element: <UpdatePatientVaccine />,
+          },
+          // =======================
+          //  Vaccine Brand Routes 
+          // =======================
           {
             path: "vaccine-brands",
             element: <VaccineBrandsView />,
