@@ -223,13 +223,9 @@ const PatientVaccinationCard = () => {
                             return (
                               <tr key={item._id || index} className="hover:bg-slate-900/45 transition">
                                 <td className="py-3.5 px-4">
-                                  <input
-                                    type="date"
-                                    disabled={isUpdating}
-                                    value={item.givenDate ? new Date(item.givenDate).toISOString().split('T')[0] : ''}
-                                    onChange={(e) => handleVaccineUpdate(item._id, { givenDate: e.target.value })}
-                                    className="bg-slate-900/80 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 focus:border-emerald-500 outline-none transition"
-                                  />
+                                  <span className="text-slate-300 text-xs">
+                                    {item.givenDate ? new Date(item.givenDate).toISOString().split('T')[0] : 'Pending'}
+                                  </span>
                                 </td>
 
                                 <td className="py-3.5 px-4 font-bold text-white">{vaccineName}</td>

@@ -179,7 +179,7 @@ const getPatientVaccinationCard = asyncHandler(async (req, res) => {
 });
 
 // =========================================================================
-// 4. UPDATE PATIENT VACCINE STATUS, BRAND NAME & GIVEN DATE (Automatic Date Logic)
+// 4. UPDATE PATIENT VACCINE STATUS, BRAND NAME & GIVEN DATE (With Inventory Sync)
 // =========================================================================
 const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
   const { patientId, vaccineId } = req.params; 
@@ -203,19 +203,21 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Vaccine record not found in patient's card.");
   }
 
+  // Purana status aur purana brand save kar lein comparison ke liye
+  const oldStatus = vaccineEntry.status;
+  const oldBrand = vaccineEntry.brandName ? vaccineEntry.brandName.trim() : "";
+
   // 1. Status & Automatic Given Date Logic
   if (status !== undefined) {
     vaccineEntry.status = status;
 
-    // Agar status "Given" select ho, toh givenDate automatic current date par set ho jaye
     if (status === "Given") {
       vaccineEntry.givenDate = givenDate ? new Date(givenDate) : new Date();
     } else if (status === "Pending") {
-      vaccineEntry.givenDate = null; // Pending hone par date clear ho jaye gi
+      vaccineEntry.givenDate = null; 
     }
   }
 
-  // Agar user ne manually koi specific givenDate bheji ho aur status "Given" ho
   if (givenDate !== undefined && status !== "Given") {
     vaccineEntry.givenDate = givenDate ? new Date(givenDate) : null;
   }
@@ -225,6 +227,68 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
     vaccineEntry.brandName = brandName.trim();
   }
 
+  const newStatus = vaccineEntry.status;
+  const newBrand = vaccineEntry.brandName ? vaccineEntry.brandName.trim() : "";
+
+  // =========================================================================
+  // INVENTORY SYNCHRONIZATION LOGIC
+  // =========================================================================
+
+  // Scenario 1: Pending se Given hua ho (Stock decrease karein)
+  if (oldStatus !== "Given" && newStatus === "Given") {
+    if (!newBrand) {
+      throw new ApiError(400, "Brand name is required when marking vaccine as Given.");
+    }
+    const brandDoc = await VaccineBrand.findOne({ doctorId, brandName: newBrand });
+    if (!brandDoc) {
+      throw new ApiError(404, `Vaccine brand "${newBrand}" not found in inventory.`);
+    }
+    if (brandDoc.inventory <= 0) {
+      throw new ApiError(400, `Out of stock: Vaccine brand "${newBrand}" inventory is 0.`);
+    }
+    brandDoc.inventory -= 1;
+    await brandDoc.save();
+  }
+
+  // Scenario 2: Given se wapas Pending kar diya ho (Stock wapas increase karein)
+  else if (oldStatus === "Given" && newStatus === "Pending") {
+    if (oldBrand) {
+      const oldBrandDoc = await VaccineBrand.findOne({ doctorId, brandName: oldBrand });
+      if (oldBrandDoc) {
+        oldBrandDoc.inventory += 1;
+        await oldBrandDoc.save();
+      }
+    }
+  }
+
+  // Scenario 3: Given hi raha lekin brand badal diya (Purane ka +1, Naye ka -1)
+  else if (oldStatus === "Given" && newStatus === "Given" && oldBrand !== newBrand) {
+    // Purane brand ko stock wapas dein
+    if (oldBrand) {
+      const oldBrandDoc = await VaccineBrand.findOne({ doctorId, brandName: oldBrand });
+      if (oldBrandDoc) {
+        oldBrandDoc.inventory += 1;
+        await oldBrandDoc.save();
+      }
+    }
+
+    // Naye brand se stock minus karein
+    if (!newBrand) {
+      throw new ApiError(400, "Brand name is required when marking vaccine as Given.");
+    }
+    const newBrandDoc = await VaccineBrand.findOne({ doctorId, brandName: newBrand });
+    if (!newBrandDoc) {
+      throw new ApiError(404, `Vaccine brand "${newBrand}" not found in inventory.`);
+    }
+    if (newBrandDoc.inventory <= 0) {
+      throw new ApiError(400, `Out of stock: Vaccine brand "${newBrand}" inventory is 0.`);
+    }
+    newBrandDoc.inventory -= 1;
+    await newBrandDoc.save();
+  }
+
+  // =========================================================================
+
   await patient.save();
 
   const updatedPatient = await Patient.findById(patientId).populate(
@@ -233,7 +297,7 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, updatedPatient, "Vaccine details updated successfully."));
+    .json(new ApiResponse(200, updatedPatient, "Vaccine details and inventory updated successfully."));
 });
 
 // =========================================================================
