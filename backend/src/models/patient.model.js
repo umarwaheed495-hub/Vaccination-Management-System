@@ -62,12 +62,17 @@ const patientSchema = new Schema(
         brandName: {
           type: String,
           trim: true,
-          default: "",
         },
       },
     ],
   },
   { timestamps: true }
 );
+
+
+patientSchema.index({ clinicId: 1, doctorId: 1 });
+patientSchema.index({ "patientVaccines.scheduleId": 1 });
+patientSchema.index({ clinicId: 1, "patientVaccines.status": 1 });
+patientSchema.index({ clinicId: 1, "patientVaccines.brandName": 1 });
 
 export const Patient = mongoose.model("Patient", patientSchema);

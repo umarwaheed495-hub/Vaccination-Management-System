@@ -291,13 +291,11 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
 
   await patient.save();
 
-  const updatedPatient = await Patient.findById(patientId).populate(
-    "patientVaccines.scheduleId"
-  );
+  await patient.populate("patientVaccines.scheduleId");
 
   return res
     .status(200)
-    .json(new ApiResponse(200, updatedPatient, "Vaccine details and inventory updated successfully."));
+    .json(new ApiResponse(200, patient, "Vaccine details and inventory updated successfully."));
 });
 
 // =========================================================================

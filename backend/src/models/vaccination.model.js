@@ -22,4 +22,6 @@ const vaccinationSchema = new mongoose.Schema(
     }
 );
 
+vaccinationSchema.index({ doctorId: 1 });
+
 export const Vaccination = mongoose.model("Vaccination", vaccinationSchema);

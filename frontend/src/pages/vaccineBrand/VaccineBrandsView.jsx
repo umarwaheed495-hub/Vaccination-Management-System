@@ -86,9 +86,44 @@ const VaccineBrandsView = () => {
       {/* Main Content Table / Grid */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
-            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-sm font-medium">Loading vaccine inventory...</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 bg-slate-900/80 text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  <th className="py-4 px-6">Vaccine Name</th>
+                  <th className="py-4 px-6">Brand Name</th>
+                  <th className="py-4 px-6">Manufacturer</th>
+                  <th className="py-4 px-6">Price</th>
+                  <th className="py-4 px-6">Inventory (Stock)</th>
+                  <th className="py-4 px-6 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {[1, 2, 3, 4, 5].map((item) => (
+                  <tr key={item} className="animate-pulse">
+                    <td className="py-4 px-6">
+                      <div className="h-4 bg-slate-800 rounded w-3/4"></div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="h-4 bg-slate-800 rounded w-1/2"></div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="h-4 bg-slate-800 rounded w-2/3"></div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="h-4 bg-slate-800 rounded w-1/4"></div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="h-6 bg-slate-800 rounded-lg w-20"></div>
+                    </td>
+                    <td className="py-4 px-6 text-right space-x-2">
+                      <div className="inline-block h-9 w-9 bg-slate-800 rounded-xl"></div>
+                      <div className="inline-block h-9 w-9 bg-slate-800 rounded-xl"></div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : brands.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3 px-4 text-center">
@@ -144,12 +179,13 @@ const VaccineBrandsView = () => {
                     {/* Inventory with Package Icon */}
                     <td className="py-4 px-6">
                       <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${brand.inventory > 10
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                          brand.inventory > 10
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                             : brand.inventory > 0
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                          }`}
+                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                        }`}
                       >
                         <Package className="w-3 h-3" />
                         {brand.inventory} units

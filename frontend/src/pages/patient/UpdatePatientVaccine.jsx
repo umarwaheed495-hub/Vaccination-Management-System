@@ -143,8 +143,36 @@ const UpdatePatientVaccine = () => {
       </div>
 
       {loading ? (
-        <div className="bg-[#0b1329]/90 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 animate-pulse">
-          Loading vaccine information...
+        <div className="bg-[#0b1329]/90 border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6 animate-pulse">
+          {/* Skeleton Banner */}
+          <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="h-3 bg-slate-800 rounded w-24"></div>
+              <div className="h-6 bg-slate-800 rounded w-40"></div>
+            </div>
+            <div className="w-12 h-12 bg-slate-800 rounded-xl"></div>
+          </div>
+
+          {/* Skeleton Status Buttons */}
+          <div className="space-y-2">
+            <div className="h-3 bg-slate-800 rounded w-32"></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="h-12 bg-slate-900/60 border border-slate-800 rounded-xl"></div>
+              <div className="h-12 bg-slate-900/60 border border-slate-800 rounded-xl"></div>
+            </div>
+          </div>
+
+          {/* Skeleton Input Field */}
+          <div className="space-y-2">
+            <div className="h-3 bg-slate-800 rounded w-28"></div>
+            <div className="h-12 bg-slate-900/60 border border-slate-800 rounded-xl"></div>
+          </div>
+
+          {/* Skeleton Footer Buttons */}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800/80">
+            <div className="h-10 w-20 bg-slate-800 rounded-xl"></div>
+            <div className="h-10 w-28 bg-slate-800 rounded-xl"></div>
+          </div>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="bg-[#0b1329]/90 border border-slate-800/80 rounded-2xl p-6  shadow-xl space-y-6">
@@ -237,7 +265,7 @@ const UpdatePatientVaccine = () => {
 
             {/* Dropdown Options List */}
             {isDropdownOpen && (
-              <div className="absolute z-50 w-full bottom-full mb-1 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-h-60 overflow-y-auto">                {filteredBrands.length > 0 ? (
+              <div className="absolute z-50 w-full bottom-full mb-1 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl max-h-60 overflow-y-auto">               {filteredBrands.length > 0 ? (
                 filteredBrands.map((brand, idx) => {
                   const bName = brand.brandName || brand.name || brand;
                   return (
