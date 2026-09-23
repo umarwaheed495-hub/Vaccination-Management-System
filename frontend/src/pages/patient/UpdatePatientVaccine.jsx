@@ -137,7 +137,7 @@ const UpdatePatientVaccine = () => {
             <span>Update Vaccine Details</span>
           </h1>
           <p className="text-slate-400 text-xs sm:text-sm mt-0.5">
-            Manage status, brand name, and administration date
+            Manage status, brand name, and given date
           </p>
         </div>
       </div>
