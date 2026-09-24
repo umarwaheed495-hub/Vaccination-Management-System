@@ -375,10 +375,15 @@ const getBrandsByVaccineName = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Validation Failed: Vaccine name parameter is required.");
   }
 
+
+  // Helper to escape special regex characters (brackets like ( ) etc.)
+  const escapedName = vaccineName.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+
   // 3. Fetch Brands from DB (Case-insensitive exact match for logged-in doctor)
   const brands = await VaccineBrand.find({
     doctorId,
-    vaccineName: { $regex: new RegExp(`^${vaccineName.trim()}$`, "i") },
+    vaccineName: { $regex: new RegExp(`^${escapedName}$`, "i") },
   });
 
   // 4. Send Response

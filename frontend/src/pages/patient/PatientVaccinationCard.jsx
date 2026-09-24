@@ -219,16 +219,25 @@ const PatientVaccinationCard = () => {
                           {groupItems.map((item, index) => {
                             const vaccineName = item.scheduleId?.name || item.vaccineName || 'Unknown Vaccine';
                             const isUpdating = updatingId === item._id;
+                            const isGiven = item.status === "Given"; // 🟢 Added requirement check
 
                             return (
-                              <tr key={item._id || index} className="hover:bg-slate-900/45 transition">
+                              <tr
+                                key={item._id || index}
+                                className={`transition ${isGiven
+                                    ? "bg-emerald-900/20 hover:bg-emerald-900/30 border-l-4 border-emerald-500" // Row turns green when given
+                                    : "hover:bg-slate-900/45" // Normal state when pending
+                                  }`}
+                              >
                                 <td className="py-3.5 px-4">
-                                  <span className="text-slate-300 text-xs">
+                                  <span className={`text-xs ${isGiven ? "text-emerald-400 font-medium" : "text-slate-300"}`}>
                                     {item.givenDate ? new Date(item.givenDate).toISOString().split('T')[0] : 'Pending'}
                                   </span>
                                 </td>
 
-                                <td className="py-3.5 px-4 font-bold text-white">{vaccineName}</td>
+                                <td className={`py-3.5 px-4 font-bold ${isGiven ? "text-emerald-200" : "text-white"}`}>
+                                  {vaccineName}
+                                </td>
 
                                 {/* Action Column with Syringe Icon opening Update Page */}
                                 <td className="py-3.5 px-4 text-center">
