@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Syringe, ArrowLeft, Calendar, ShieldCheck, User, Phone } from 'lucide-react';
+import { Syringe, ArrowLeft, Calendar, ShieldCheck, User, Phone, Download } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const PatientVaccinationCard = () => {
   const { patientId } = useParams();
@@ -74,6 +76,54 @@ const PatientVaccinationCard = () => {
     }
   };
 
+  // 3. PDF Download Handler for a Specific Due Date Group
+  const downloadGroupPDF = (dueDate, groupItems) => {
+    try {
+      const doc = new jsPDF();
+
+      // Document Header Styling
+      doc.setFontSize(18);
+      doc.setTextColor(16, 185, 129); // Emerald accent
+      doc.text("Immunization Status Report", 14, 20);
+
+      // Patient Info Summary
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Patient Name: ${patientData?.patientName || 'N/A'}`, 14, 28);
+      doc.text(`Father's Name: ${patientData?.fatherName || 'N/A'}`, 14, 34);
+      doc.text(`Recommended Due Date: ${dueDate}`, 14, 40);
+
+      // Table Setup
+      const tableColumn = ["#", "Vaccine Name", "Status", "Given Date"];
+      const tableRows = [];
+
+      groupItems.forEach((item, index) => {
+        const vName = item.scheduleId?.name || item.vaccineName || 'Unknown Vaccine';
+        const vStatus = item.status || 'Pending';
+        const vDate = item.givenDate ? new Date(item.givenDate).toISOString().split('T')[0] : 'Pending';
+
+        tableRows.push([index + 1, vName, vStatus, vDate]);
+      });
+
+      // Generate Table using autoTable helper function
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 48,
+        theme: 'grid',
+        headStyles: { fillColor: [15, 23, 42] }, // Slate dark theme
+        styles: { fontSize: 9, cellPadding: 4 },
+      });
+
+      // Save PDF File
+      doc.save(`Vaccination_Report_${dueDate.replace(/\//g, '-')}.pdf`);
+      toast.success(`PDF downloaded for Due Date: ${dueDate}`);
+    } catch (err) {
+      console.error("Failed to generate PDF:", err);
+      toast.error("Failed to download PDF report.");
+    }
+  };
+
   // Helper: Group vaccines by their Due Date
   const groupedVaccines = vaccines.reduce((groups, item) => {
     const dueDateKey = item.dueDate ? new Date(item.dueDate).toLocaleDateString() : 'N/A';
@@ -97,7 +147,6 @@ const PatientVaccinationCard = () => {
           </button>
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2">
-              {/* <Activity className="w-7 h-7 text-emerald-500" /> */}
               <span>Vaccination Card</span>
             </h1>
             <p className="text-slate-400 text-xs sm:text-sm mt-1">
@@ -198,12 +247,23 @@ const PatientVaccinationCard = () => {
                     key={groupIndex}
                     className="mb-6 bg-slate-900/40 border border-slate-800/80 rounded-2xl shadow-lg overflow-hidden last:mb-0"
                   >
-                    <div className="bg-slate-900/90 px-5 py-3 border-b border-slate-800/80 flex items-center justify-center gap-2 text-emerald-400 text-xs font-bold tracking-wider uppercase text-center">
-                      <div className="flex items-center gap-2">
+                    {/* Due Date Card Header with PDF Download Button */}
+                    <div className="bg-slate-900/90 px-5 py-3 border-b border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-emerald-400 text-xs font-bold tracking-wider">
+                      <div className="flex items-center justify-center gap-2 flex-1 text-center sm:text-left">
                         <Calendar className="w-4 h-4" />
                         <span>Recommended Due Date: {dueDate}</span>
                         <span className="text-slate-400 font-normal">({groupItems.length} Vaccines)</span>
                       </div>
+
+                      {/* PDF Export Button */}
+                      <button
+                        onClick={() => downloadGroupPDF(dueDate, groupItems)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl transition text-xs font-medium tracking-normal normal-case"
+                        title="Download status report for this due date"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>PDF Report</span>
+                      </button>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -218,15 +278,14 @@ const PatientVaccinationCard = () => {
                         <tbody className="divide-y divide-slate-800/40 text-sm">
                           {groupItems.map((item, index) => {
                             const vaccineName = item.scheduleId?.name || item.vaccineName || 'Unknown Vaccine';
-                            const isUpdating = updatingId === item._id;
-                            const isGiven = item.status === "Given"; // 🟢 Added requirement check
+                            const isGiven = item.status === "Given";
 
                             return (
                               <tr
                                 key={item._id || index}
                                 className={`transition ${isGiven
-                                    ? "bg-emerald-900/20 hover:bg-emerald-900/30 border-l-4 border-emerald-500" // Row turns green when given
-                                    : "hover:bg-slate-900/45" // Normal state when pending
+                                    ? "bg-emerald-900/20 hover:bg-emerald-900/30 border-l-4 border-emerald-500"
+                                    : "hover:bg-slate-900/45"
                                   }`}
                               >
                                 <td className="py-3.5 px-4">
@@ -239,7 +298,6 @@ const PatientVaccinationCard = () => {
                                   {vaccineName}
                                 </td>
 
-                                {/* Action Column with Syringe Icon opening Update Page */}
                                 <td className="py-3.5 px-4 text-center">
                                   <button
                                     onClick={() => navigate(`/dashboard/update-vaccine/${patientId}/${item._id}`)}
