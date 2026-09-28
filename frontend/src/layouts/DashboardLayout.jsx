@@ -10,7 +10,7 @@ const DashboardLayout = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post('/api/v1/doctor/logout', {}, { withCredentials: true }).catch(() => {});
+      await axios.post('/api/v1/doctors/logout', {}, { withCredentials: true }).catch(() => {});
     } catch (error) {
       console.error("Logout API Error:", error);
     } finally {
