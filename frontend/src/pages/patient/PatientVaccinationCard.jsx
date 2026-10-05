@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Syringe, ArrowLeft, Calendar, ShieldCheck, User, Phone, Download } from 'lucide-react';
+import { Syringe, ArrowLeft, Calendar, ShieldCheck, User, Phone, Download, Printer } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
@@ -97,149 +97,177 @@ const PatientVaccinationCard = () => {
     }
   };
 
-  // 3. PDF Download Handler for a Specific Due Date Group
+  // 3. Build the PDF document (shared by Download & Print)
+  const buildGroupPDF = (dueDate, groupItems) => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 14;
+
+    // Colors
+    const DARK = [15, 23, 42];
+    const EMERALD = [16, 185, 129];
+    const MUTED = [100, 116, 139];
+
+    // Clinic & Doctor names (backend se populate hoke aate hain)
+    const clinicName = patientData?.clinicId?.clinicName || 'N/A';
+    const rawDoctorName = patientData?.doctorId?.name || 'N/A';
+    const doctorName = /^dr\.?\s/i.test(rawDoctorName) || rawDoctorName === 'N/A'
+      ? rawDoctorName
+      : `Dr. ${rawDoctorName}`;
+
+    // ---------- Header Band ----------
+    doc.setFillColor(...DARK);
+    doc.rect(0, 0, pageWidth, 36, 'F');
+    doc.setFillColor(...EMERALD);
+    doc.rect(0, 36, pageWidth, 2, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(21);
+    doc.setTextColor(255, 255, 255);
+    doc.text(doc.splitTextToSize(clinicName, pageWidth - 90)[0], marginX, 17);
+
+    doc.setFontSize(11);
+    doc.setTextColor(110, 231, 183);
+    doc.text(doctorName, marginX, 27);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(203, 213, 225);
+    doc.text(`Report Date: ${new Date().toLocaleDateString()}`, pageWidth - marginX, 17, { align: 'right' });
+
+    // ---------- Report Title ----------
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(...DARK);
+    doc.text("Immunization Status Report", marginX, 52);
+
+    // ---------- Patient Info Box ----------
+    const boxY = 58;
+    const boxH = 34;
+    doc.setFillColor(241, 245, 249);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(marginX, boxY, pageWidth - marginX * 2, boxH, 3, 3, 'FD');
+    doc.setFillColor(...EMERALD);
+    doc.rect(marginX, boxY + 3, 1.2, boxH - 6, 'F'); // left accent line
+
+    const drawField = (label, value, x, y) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text(label.toUpperCase(), x, y);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...DARK);
+      doc.text(doc.splitTextToSize(String(value), 80)[0], x, y + 6);
+    };
+
+    const col1 = marginX + 7;
+    const col2 = pageWidth / 2 + 4;
+    drawField("Patient Name", patientData?.patientName || 'N/A', col1, boxY + 9);
+    drawField("Father's Name", patientData?.fatherName || 'N/A', col2, boxY + 9);
+    drawField("Recommended Due Date", dueDate, col1, boxY + 23);
+    drawField("Total Vaccines", groupItems.length, col2, boxY + 23);
+
+    // ---------- Table Data ----------
+    const tableColumn = ["Vaccine Name", "Brand", "Status", "Given Date", "Price (Rs)"];
+    const tableRows = [];
+    let totalPrice = 0;
+
+    groupItems.forEach((item) => {
+      const vName = item.scheduleId?.name || item.vaccineName || 'Unknown Vaccine';
+      const vStatus = item.status || 'Pending';
+      const vDate = item.givenDate ? new Date(item.givenDate).toISOString().split('T')[0] : 'Pending';
+
+      // Price sirf Given vaccine ki show hogi
+      const isGiven = item.status === 'Given';
+      const price = isGiven ? Number(brandPrices[item.brandName] ?? 0) : null;
+      if (isGiven) totalPrice += price;
+
+      tableRows.push([
+        vName,
+        item.brandName || '-',
+        vStatus,
+        vDate,
+        isGiven ? price.toLocaleString('en-US') : '-',
+      ]);
+    });
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      foot: [["", "", "", "Total", `Rs ${totalPrice.toLocaleString('en-US')}`]],
+      startY: boxY + boxH + 8,
+      margin: { top: 20, left: marginX, right: marginX, bottom: 22 },
+      theme: 'striped',
+      styles: {
+        font: 'helvetica',
+        fontSize: 9.5,
+        cellPadding: { top: 4, bottom: 4, left: 5, right: 5 },
+        lineColor: [226, 232, 240],
+        lineWidth: 0.2,
+        textColor: [30, 41, 59],
+      },
+      headStyles: { fillColor: DARK, textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      footStyles: { fillColor: [236, 253, 245], textColor: [6, 95, 70], fontStyle: 'bold', fontSize: 10.5 },
+      columnStyles: {
+        0: { cellWidth: 'auto' },
+        1: { cellWidth: 36 },
+        2: { cellWidth: 24, halign: 'center' },
+        3: { cellWidth: 30, halign: 'center' },
+        4: { cellWidth: 28, halign: 'right' },
+      },
+      // Status ko color dena (Given = green, Pending = amber)
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 2) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = data.cell.raw === 'Given' ? [4, 120, 87] : [180, 83, 9];
+        }
+      },
+    });
+
+    // ---------- Footer (har page par) ----------
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(marginX, pageHeight - 16, pageWidth - marginX, pageHeight - 16);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text("This is a computer-generated report.", marginX, pageHeight - 10);
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - marginX, pageHeight - 10, { align: 'right' });
+    }
+
+    return doc;
+  };
+
+  // 3a. PDF Download Handler for a Specific Due Date Group
   const downloadGroupPDF = (dueDate, groupItems) => {
     try {
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const marginX = 14;
-
-      // Colors
-      const DARK = [15, 23, 42];
-      const EMERALD = [16, 185, 129];
-      const MUTED = [100, 116, 139];
-
-      // Clinic & Doctor names (backend se populate hoke aate hain)
-      const clinicName = patientData?.clinicId?.clinicName || 'N/A';
-      const rawDoctorName = patientData?.doctorId?.name || 'N/A';
-      const doctorName = /^dr\.?\s/i.test(rawDoctorName) || rawDoctorName === 'N/A'
-        ? rawDoctorName
-        : `Dr. ${rawDoctorName}`;
-
-      // ---------- Header Band ----------
-      doc.setFillColor(...DARK);
-      doc.rect(0, 0, pageWidth, 36, 'F');
-      doc.setFillColor(...EMERALD);
-      doc.rect(0, 36, pageWidth, 2, 'F');
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(21);
-      doc.setTextColor(255, 255, 255);
-      doc.text(doc.splitTextToSize(clinicName, pageWidth - 90)[0], marginX, 17);
-
-      doc.setFontSize(11);
-      doc.setTextColor(110, 231, 183);
-      doc.text(doctorName, marginX, 27);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(203, 213, 225);
-      doc.text(`Report Date: ${new Date().toLocaleDateString()}`, pageWidth - marginX, 17, { align: 'right' });
-
-      // ---------- Report Title ----------
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(15);
-      doc.setTextColor(...DARK);
-      doc.text("Immunization Status Report", marginX, 52);
-
-      // ---------- Patient Info Box ----------
-      const boxY = 58;
-      const boxH = 34;
-      doc.setFillColor(241, 245, 249);
-      doc.setDrawColor(226, 232, 240);
-      doc.roundedRect(marginX, boxY, pageWidth - marginX * 2, boxH, 3, 3, 'FD');
-      doc.setFillColor(...EMERALD);
-      doc.rect(marginX, boxY + 3, 1.2, boxH - 6, 'F'); // left accent line
-
-      const drawField = (label, value, x, y) => {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.setTextColor(...MUTED);
-        doc.text(label.toUpperCase(), x, y);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(...DARK);
-        doc.text(doc.splitTextToSize(String(value), 80)[0], x, y + 6);
-      };
-
-      const col1 = marginX + 7;
-      const col2 = pageWidth / 2 + 4;
-      drawField("Patient Name", patientData?.patientName || 'N/A', col1, boxY + 9);
-      drawField("Father's Name", patientData?.fatherName || 'N/A', col2, boxY + 9);
-      drawField("Recommended Due Date", dueDate, col1, boxY + 23);
-      drawField("Total Vaccines", groupItems.length, col2, boxY + 23);
-
-      // ---------- Table Data ----------
-      const tableColumn = ["Vaccine Name", "Status", "Given Date", "Price (Rs)"];
-      const tableRows = [];
-      let totalPrice = 0;
-
-      groupItems.forEach((item) => {
-        const vName = item.scheduleId?.name || item.vaccineName || 'Unknown Vaccine';
-        const vStatus = item.status || 'Pending';
-        const vDate = item.givenDate ? new Date(item.givenDate).toISOString().split('T')[0] : 'Pending';
-
-        // Price sirf Given vaccine ki show hogi
-        const isGiven = item.status === 'Given';
-        const price = isGiven ? Number(brandPrices[item.brandName] ?? 0) : null;
-        if (isGiven) totalPrice += price;
-
-        tableRows.push([vName, vStatus, vDate, isGiven ? price.toLocaleString('en-US') : '-']);
-      });
-
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        foot: [["", "", "Total", `Rs ${totalPrice.toLocaleString('en-US')}`]],
-        startY: boxY + boxH + 8,
-        margin: { top: 20, left: marginX, right: marginX, bottom: 22 },
-        theme: 'striped',
-        styles: {
-          font: 'helvetica',
-          fontSize: 9.5,
-          cellPadding: { top: 4, bottom: 4, left: 5, right: 5 },
-          lineColor: [226, 232, 240],
-          lineWidth: 0.2,
-          textColor: [30, 41, 59],
-        },
-        headStyles: { fillColor: DARK, textColor: 255, fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        footStyles: { fillColor: [236, 253, 245], textColor: [6, 95, 70], fontStyle: 'bold', fontSize: 10.5 },
-        columnStyles: {
-          0: { cellWidth: 'auto' },
-          1: { cellWidth: 28, halign: 'center' },
-          2: { cellWidth: 34, halign: 'center' },
-          3: { cellWidth: 32, halign: 'right' },
-        },
-        // Status ko color dena (Given = green, Pending = amber)
-        didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 1) {
-            data.cell.styles.fontStyle = 'bold';
-            data.cell.styles.textColor = data.cell.raw === 'Given' ? [4, 120, 87] : [180, 83, 9];
-          }
-        },
-      });
-
-      // ---------- Footer (har page par) ----------
-      const pageCount = doc.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setDrawColor(226, 232, 240);
-        doc.line(marginX, pageHeight - 16, pageWidth - marginX, pageHeight - 16);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.setTextColor(...MUTED);
-        doc.text("This is a computer-generated report.", marginX, pageHeight - 10);
-        doc.text(`Page ${i} of ${pageCount}`, pageWidth - marginX, pageHeight - 10, { align: 'right' });
-      }
-
-      // Save PDF File
+      const doc = buildGroupPDF(dueDate, groupItems);
       doc.save(`Vaccination_Report_${dueDate.replace(/\//g, '-')}.pdf`);
       toast.success(`PDF downloaded for Due Date: ${dueDate}`);
     } catch (err) {
       console.error("Failed to generate PDF:", err);
       toast.error("Failed to download PDF report.");
+    }
+  };
+
+  // 3b. Print Handler: same PDF opens in a new tab and print dialog opens automatically
+  const printGroupPDF = (dueDate, groupItems) => {
+    try {
+      const doc = buildGroupPDF(dueDate, groupItems);
+      doc.autoPrint();
+      const pdfUrl = doc.output('bloburl');
+      const printWindow = window.open(pdfUrl, '_blank');
+      if (!printWindow) {
+        toast.error("Popup blocked. Please allow popups for this site to print.");
+      }
+    } catch (err) {
+      console.error("Failed to print PDF:", err);
+      toast.error("Failed to print report.");
     }
   };
 
@@ -374,15 +402,26 @@ const PatientVaccinationCard = () => {
                         <span className="text-slate-400 font-normal">({groupItems.length} Vaccines)</span>
                       </div>
 
-                      {/* PDF Export Button */}
-                      <button
-                        onClick={() => downloadGroupPDF(dueDate, groupItems)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl transition text-xs font-medium tracking-normal normal-case"
-                        title="Download status report for this due date"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>PDF Report</span>
-                      </button>
+                      {/* PDF Export & Print Buttons */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => downloadGroupPDF(dueDate, groupItems)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl transition text-xs font-medium tracking-normal normal-case"
+                          title="Download status report for this due date"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>PDF Report</span>
+                        </button>
+
+                        <button
+                          onClick={() => printGroupPDF(dueDate, groupItems)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-xl transition text-xs font-medium tracking-normal normal-case"
+                          title="Print status report for this due date"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print</span>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="overflow-x-auto">
