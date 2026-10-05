@@ -14,6 +14,7 @@ const PatientVaccinationCard = () => {
   const [patientData, setPatientData] = useState(null);
   const [vaccines, setVaccines] = useState([]);
   const [updatingId, setUpdatingId] = useState(null);
+  const [brandPrices, setBrandPrices] = useState({});
 
   // 1. Fetch Patient Vaccination Card details from backend
   const fetchVaccinationCard = async () => {
@@ -40,9 +41,29 @@ const PatientVaccinationCard = () => {
     }
   };
 
+  // Fetch vaccine brand prices (brandName -> price)
+  const fetchBrandPrices = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/v1/vaccine-brands', {
+        headers: { Authorization: `Bearer ${token}` },
+        withCredentials: true,
+      });
+
+      const map = {};
+      (response.data?.data || []).forEach((b) => {
+        map[b.brandName] = b.price;
+      });
+      setBrandPrices(map);
+    } catch (error) {
+      console.error("Failed to fetch brand prices:", error);
+    }
+  };
+
   useEffect(() => {
     if (patientId) {
       fetchVaccinationCard();
+      fetchBrandPrices();
     }
   }, [patientId]);
 
@@ -80,40 +101,138 @@ const PatientVaccinationCard = () => {
   const downloadGroupPDF = (dueDate, groupItems) => {
     try {
       const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 14;
 
-      // Document Header Styling
-      doc.setFontSize(18);
-      doc.setTextColor(16, 185, 129); // Emerald accent
-      doc.text("Immunization Status Report", 14, 20);
+      // Colors
+      const DARK = [15, 23, 42];
+      const EMERALD = [16, 185, 129];
+      const MUTED = [100, 116, 139];
 
-      // Patient Info Summary
-      doc.setFontSize(10);
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Patient Name: ${patientData?.patientName || 'N/A'}`, 14, 28);
-      doc.text(`Father's Name: ${patientData?.fatherName || 'N/A'}`, 14, 34);
-      doc.text(`Recommended Due Date: ${dueDate}`, 14, 40);
+      // Clinic & Doctor names (backend se populate hoke aate hain)
+      const clinicName = patientData?.clinicId?.clinicName || 'N/A';
+      const rawDoctorName = patientData?.doctorId?.name || 'N/A';
+      const doctorName = /^dr\.?\s/i.test(rawDoctorName) || rawDoctorName === 'N/A'
+        ? rawDoctorName
+        : `Dr. ${rawDoctorName}`;
 
-      // Table Setup
-      const tableColumn = ["#", "Vaccine Name", "Status", "Given Date"];
+      // ---------- Header Band ----------
+      doc.setFillColor(...DARK);
+      doc.rect(0, 0, pageWidth, 36, 'F');
+      doc.setFillColor(...EMERALD);
+      doc.rect(0, 36, pageWidth, 2, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(21);
+      doc.setTextColor(255, 255, 255);
+      doc.text(doc.splitTextToSize(clinicName, pageWidth - 90)[0], marginX, 17);
+
+      doc.setFontSize(11);
+      doc.setTextColor(110, 231, 183);
+      doc.text(doctorName, marginX, 27);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(203, 213, 225);
+      doc.text(`Report Date: ${new Date().toLocaleDateString()}`, pageWidth - marginX, 17, { align: 'right' });
+
+      // ---------- Report Title ----------
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.setTextColor(...DARK);
+      doc.text("Immunization Status Report", marginX, 52);
+
+      // ---------- Patient Info Box ----------
+      const boxY = 58;
+      const boxH = 34;
+      doc.setFillColor(241, 245, 249);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(marginX, boxY, pageWidth - marginX * 2, boxH, 3, 3, 'FD');
+      doc.setFillColor(...EMERALD);
+      doc.rect(marginX, boxY + 3, 1.2, boxH - 6, 'F'); // left accent line
+
+      const drawField = (label, value, x, y) => {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(...MUTED);
+        doc.text(label.toUpperCase(), x, y);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(...DARK);
+        doc.text(doc.splitTextToSize(String(value), 80)[0], x, y + 6);
+      };
+
+      const col1 = marginX + 7;
+      const col2 = pageWidth / 2 + 4;
+      drawField("Patient Name", patientData?.patientName || 'N/A', col1, boxY + 9);
+      drawField("Father's Name", patientData?.fatherName || 'N/A', col2, boxY + 9);
+      drawField("Recommended Due Date", dueDate, col1, boxY + 23);
+      drawField("Total Vaccines", groupItems.length, col2, boxY + 23);
+
+      // ---------- Table Data ----------
+      const tableColumn = ["Vaccine Name", "Status", "Given Date", "Price (Rs)"];
       const tableRows = [];
+      let totalPrice = 0;
 
-      groupItems.forEach((item, index) => {
+      groupItems.forEach((item) => {
         const vName = item.scheduleId?.name || item.vaccineName || 'Unknown Vaccine';
         const vStatus = item.status || 'Pending';
         const vDate = item.givenDate ? new Date(item.givenDate).toISOString().split('T')[0] : 'Pending';
 
-        tableRows.push([index + 1, vName, vStatus, vDate]);
+        // Price sirf Given vaccine ki show hogi
+        const isGiven = item.status === 'Given';
+        const price = isGiven ? Number(brandPrices[item.brandName] ?? 0) : null;
+        if (isGiven) totalPrice += price;
+
+        tableRows.push([vName, vStatus, vDate, isGiven ? price.toLocaleString('en-US') : '-']);
       });
 
-      // Generate Table using autoTable helper function
       autoTable(doc, {
         head: [tableColumn],
         body: tableRows,
-        startY: 48,
-        theme: 'grid',
-        headStyles: { fillColor: [15, 23, 42] }, // Slate dark theme
-        styles: { fontSize: 9, cellPadding: 4 },
+        foot: [["", "", "Total", `Rs ${totalPrice.toLocaleString('en-US')}`]],
+        startY: boxY + boxH + 8,
+        margin: { top: 20, left: marginX, right: marginX, bottom: 22 },
+        theme: 'striped',
+        styles: {
+          font: 'helvetica',
+          fontSize: 9.5,
+          cellPadding: { top: 4, bottom: 4, left: 5, right: 5 },
+          lineColor: [226, 232, 240],
+          lineWidth: 0.2,
+          textColor: [30, 41, 59],
+        },
+        headStyles: { fillColor: DARK, textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        footStyles: { fillColor: [236, 253, 245], textColor: [6, 95, 70], fontStyle: 'bold', fontSize: 10.5 },
+        columnStyles: {
+          0: { cellWidth: 'auto' },
+          1: { cellWidth: 28, halign: 'center' },
+          2: { cellWidth: 34, halign: 'center' },
+          3: { cellWidth: 32, halign: 'right' },
+        },
+        // Status ko color dena (Given = green, Pending = amber)
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 1) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.textColor = data.cell.raw === 'Given' ? [4, 120, 87] : [180, 83, 9];
+          }
+        },
       });
+
+      // ---------- Footer (har page par) ----------
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setDrawColor(226, 232, 240);
+        doc.line(marginX, pageHeight - 16, pageWidth - marginX, pageHeight - 16);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(...MUTED);
+        doc.text("This is a computer-generated report.", marginX, pageHeight - 10);
+        doc.text(`Page ${i} of ${pageCount}`, pageWidth - marginX, pageHeight - 10, { align: 'right' });
+      }
 
       // Save PDF File
       doc.save(`Vaccination_Report_${dueDate.replace(/\//g, '-')}.pdf`);

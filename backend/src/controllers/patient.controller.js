@@ -169,9 +169,10 @@ const getPatientVaccinationCard = asyncHandler(async (req, res) => {
   patient.patientVaccines = updatedPatientVaccines;
   await patient.save();
 
-  const populatedPatient = await Patient.findById(patientId).populate(
-    "patientVaccines.scheduleId"
-  );
+  const populatedPatient = await Patient.findById(patientId)
+    .populate("patientVaccines.scheduleId")
+    .populate("clinicId", "clinicName")
+    .populate("doctorId", "name");
 
   return res
     .status(200)
