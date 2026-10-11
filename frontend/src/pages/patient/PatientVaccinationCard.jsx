@@ -5,6 +5,37 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
+
+// ---------- QR Code helpers (PDF ke liye) ----------
+// QR data generate karta hai; agar data bohot zyada ho to null return karta hai
+const createQR = (text) => {
+  try {
+    return QRCode.create(text, { errorCorrectionLevel: 'M' });
+  } catch (err) {
+    return null;
+  }
+};
+
+// QR ko PDF mein vector squares ki shakal mein draw karta hai (sync, image ki zaroorat nahi)
+const drawQR = (doc, qr, x, y, size) => {
+  const count = qr.modules.size;
+  const quiet = 4; // quiet zone (safed border) modules mein
+  const cell = size / (count + quiet * 2);
+
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(226, 232, 240);
+  doc.rect(x, y, size, size, 'FD');
+
+  doc.setFillColor(0, 0, 0);
+  for (let row = 0; row < count; row++) {
+    for (let col = 0; col < count; col++) {
+      if (qr.modules.get(row, col)) {
+        doc.rect(x + (col + quiet) * cell, y + (row + quiet) * cell, cell + 0.02, cell + 0.02, 'F');
+      }
+    }
+  }
+};
 
 const PatientVaccinationCard = () => {
   const { patientId } = useParams();
@@ -193,6 +224,8 @@ const PatientVaccinationCard = () => {
       ]);
     });
 
+    let tableEndY = boxY + boxH + 8;
+
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
@@ -218,6 +251,9 @@ const PatientVaccinationCard = () => {
         3: { cellWidth: 30, halign: 'center' },
         4: { cellWidth: 28, halign: 'right' },
       },
+      didDrawPage: (data) => {
+        tableEndY = data.cursor?.y ?? tableEndY;
+      },
       // Status ko color dena (Given = green, Pending = amber)
       didParseCell: (data) => {
         if (data.section === 'body' && data.column.index === 2) {
@@ -226,6 +262,61 @@ const PatientVaccinationCard = () => {
         }
       },
     });
+
+    // ---------- QR Code (report ki details) ----------
+    const qrFullText = [
+      "IMMUNIZATION STATUS REPORT",
+      `Clinic: ${clinicName}`,
+      `Doctor: ${doctorName}`,
+      `Patient: ${patientData?.patientName || 'N/A'}`,
+      `Father: ${patientData?.fatherName || 'N/A'}`,
+      `Due Date: ${dueDate}`,
+      `Report Date: ${new Date().toLocaleDateString()}`,
+      "---",
+      ...tableRows.map((r, i) => `${i + 1}. ${r[0]} | ${r[1]} | ${r[2]} | ${r[3]} | ${r[4] === '-' ? '-' : `Rs ${r[4]}`}`),
+      `Total: Rs ${totalPrice.toLocaleString('en-US')}`,
+    ].join('\n');
+
+    // Agar data zyada ho jaye to chhota version (sirf naam aur status) use hota hai
+    const qrCompactText = [
+      `${clinicName} - ${doctorName}`,
+      `Patient: ${patientData?.patientName || 'N/A'}`,
+      `Due Date: ${dueDate}`,
+      ...tableRows.map((r, i) => `${i + 1}. ${r[0]} | ${r[2]}`),
+      `Total: Rs ${totalPrice.toLocaleString('en-US')}`,
+    ].join('\n');
+
+    const qr = createQR(qrFullText) || createQR(qrCompactText);
+
+    if (qr) {
+      const qrSize = 40;
+      const qrX = pageWidth - marginX - qrSize;
+      const finalY = doc.lastAutoTable?.finalY ?? tableEndY;
+      let qrY = finalY + 10;
+
+      // Agar current page par jagah na ho to nayi page par
+      if (qrY + qrSize > pageHeight - 22) {
+        doc.addPage();
+        qrY = 24;
+      }
+
+      drawQR(doc, qr, qrX, qrY, qrSize);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(...DARK);
+      doc.text("Scan to view report details", qrX - 6, qrY + 16, { align: 'right' });
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text(
+        ["Scan this QR code with your phone camera", "to see the vaccine details of this report."],
+        qrX - 6,
+        qrY + 23,
+        { align: 'right' }
+      );
+    }
 
     // ---------- Footer (har page par) ----------
     const pageCount = doc.getNumberOfPages();
