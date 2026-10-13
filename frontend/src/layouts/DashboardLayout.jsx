@@ -10,7 +10,7 @@ const DashboardLayout = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post('/api/v1/doctors/logout', {}, { withCredentials: true }).catch(() => {});
+      await axios.post('/api/v1/doctors/logout', {}, { withCredentials: true }).catch(() => { });
     } catch (error) {
       console.error("Logout API Error:", error);
     } finally {
@@ -72,10 +72,9 @@ const DashboardLayout = () => {
                 to="/dashboard"
                 end
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                   }`
                 }
               >
@@ -86,10 +85,9 @@ const DashboardLayout = () => {
               <NavLink
                 to="/dashboard/clinic"
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                   }`
                 }
               >
@@ -100,10 +98,9 @@ const DashboardLayout = () => {
               <NavLink
                 to="/dashboard/patients"
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                   }`
                 }
               >
@@ -115,10 +112,9 @@ const DashboardLayout = () => {
               <NavLink
                 to="/dashboard/vaccine-brands"
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                   }`
                 }
               >
@@ -129,15 +125,27 @@ const DashboardLayout = () => {
               <NavLink
                 to="/dashboard/schedule"
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
                   }`
                 }
               >
                 <CalendarRange className="w-5 h-5" />
                 <span>Doctor Schedule</span>
+              </NavLink>
+
+              <NavLink
+                to="/dashboard/alerts"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm sm:text-base font-semibold transition-all ${isActive
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                  }`
+                }
+              >
+                <Bell className="w-5 h-5" />
+                <span>Alerts</span>
               </NavLink>
             </nav>
           </div>

@@ -36,6 +36,9 @@ import VaccineBrandsView from './pages/vaccineBrand/VaccineBrandsView';
 import CreateVaccineBrand from './pages/vaccineBrand/CreateVaccineBrand';
 import EditVaccineBrand from './pages/vaccineBrand/EditVaccineBrand';
 
+// Alert / Notification Pages
+import AlertsView from './pages/alerts/AlertsView';
+
 
 const router = createBrowserRouter([
   // Public Routes
@@ -48,7 +51,7 @@ const router = createBrowserRouter([
 
   // Protected Dashboard Routes (Fully Secured via ProtectedRoute)
   {
-    element: <ProtectedRoute />, 
+    element: <ProtectedRoute />,
     children: [
       {
         path: "/dashboard",
@@ -111,7 +114,7 @@ const router = createBrowserRouter([
             path: "vaccine-brands",
             element: <VaccineBrandsView />,
           },
-          
+
           {
             path: "create-vaccine-brand",
             element: <CreateVaccineBrand />,
@@ -119,6 +122,14 @@ const router = createBrowserRouter([
           {
             path: "edit-vaccine-brand/:brandId",
             element: <EditVaccineBrand />,
+          },
+
+          // =======================
+          //   Alerts (created automatically, 12h before a vaccine is due)
+          // =======================
+          {
+            path: "alerts",
+            element: <AlertsView />,
           },
         ],
       },

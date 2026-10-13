@@ -10,6 +10,7 @@ import clinicRouter from "./routes/clinic.routes.js";
 import vaccinationRouter from "./routes/vaccination.routes.js";
 import patientRouter from "./routes/patient.routes.js"; 
 import vaccineBrandRouter from "./routes/vaccineBrand.routes.js"; 
+import alertRouter from "./routes/alert.routes.js";
 
 const app = express()
 
@@ -32,6 +33,7 @@ app.use("/api/v1/clinics", clinicRouter);
 app.use("/api/v1/vaccinations", vaccinationRouter);
 app.use("/api/v1/patients", patientRouter);
 app.use("/api/v1/vaccine-brands", vaccineBrandRouter); 
+app.use("/api/v1/alerts", alertRouter);
 
 // 3. Centralized Error Handler (Hamesha end mein aayega)
 app.use(errorHandler)

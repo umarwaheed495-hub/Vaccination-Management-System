@@ -2,36 +2,11 @@ import { Patient } from "../models/patient.model.js";
 import { Clinic } from "../models/clinic.model.js";
 import { Vaccination } from "../models/vaccination.model.js";
 import { VaccineBrand } from "../models/vaccineBrand.model.js";
+import { Alert } from "../models/alert.model.js";
+import { calculateDueDate } from "../utils/dueDate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-
-// Helper Function: Patient DOB aur Vaccine schedule string se Due Date calculate karne ke liye
-const calculateDueDate = (dob, scheduleStr) => {
-  const birthDate = new Date(dob);
-  if (isNaN(birthDate.getTime())) return null;
-
-  const str = scheduleStr ? scheduleStr.toLowerCase().trim() : "";
-  
-  if (str === "birth" || str === "at birth" || str === "0") {
-    return birthDate;
-  }
-
-  const num = parseInt(str);
-  if (isNaN(num)) return birthDate;
-
-  const dueDate = new Date(birthDate);
-
-  if (str.includes("week")) {
-    dueDate.setDate(dueDate.getDate() + (num * 7));
-  } else if (str.includes("month")) {
-    dueDate.setMonth(dueDate.getMonth() + num);
-  } else if (str.includes("year")) {
-    dueDate.setFullYear(dueDate.getFullYear() + num);
-  }
-
-  return dueDate;
-};
 
 // =========================================================================
 // 1. ADD NEW PATIENT (Clean Registration without pre-attaching vaccines)
@@ -292,6 +267,11 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
 
   await patient.save();
 
+  // Vaccine administered -> its alert is no longer needed
+  if (newStatus === "Given") {
+    await Alert.deleteOne({ patientId: patient._id, scheduleId: vaccineEntry.scheduleId });
+  }
+
   await patient.populate("patientVaccines.scheduleId");
 
   return res
@@ -416,6 +396,9 @@ const deletePatient = asyncHandler(async (req, res) => {
   if (!deletedPatient) {
     throw new ApiError(500, "Database Error: Failed to delete patient record.");
   }
+
+  // Patient is gone -> remove their vaccine alerts too
+  await Alert.deleteMany({ patientId: id });
 
   return res
     .status(200)
