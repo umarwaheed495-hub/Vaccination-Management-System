@@ -45,13 +45,13 @@ const alertSchema = new mongoose.Schema(
         },
 
         // Vaccine due date calculated from the patient's date of birth.
-        // The alert is created ALERT_LEAD_HOURS (12h) before this moment.
+        // The alert is created when this day starts (12:00 AM) and stays until the vaccine is given.
         dueDate: {
             type: Date,
             required: true
         },
 
-        // "read" only clears the unread badge. The alert stays until the vaccine is given.
+        // "read" only changes how the alert looks. The alert stays until the vaccine is given.
         status: {
             type: String,
             enum: {
@@ -66,9 +66,9 @@ const alertSchema = new mongoose.Schema(
     }
 );
 
-// List sorted by due date, and unread count
-alertSchema.index({ doctorId: 1, dueDate: 1 });
-alertSchema.index({ doctorId: 1, status: 1 });
+// The alerts list: one doctor + one day (range on dueDate), ordered by dueDate, patientName, _id.
+// The index has exactly that order, so MongoDB returns the page already sorted (no in-memory sort).
+alertSchema.index({ doctorId: 1, dueDate: 1, patientName: 1, _id: 1 });
 
 // One alert per patient per vaccine. This stops the scheduler from creating duplicates.
 // Partial, so any old-format documents (no patientId) cannot break index creation.

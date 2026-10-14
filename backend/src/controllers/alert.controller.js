@@ -6,6 +6,10 @@ import { getDayRange, getTodayString } from "../utils/alertScheduler.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+const MAX_PAGE = 10000; // keeps "skip" far below what MongoDB accepts; no doctor has this many alerts on one day
+
+// Only the fields AlertsView shows or uses (smaller response, less data read)
+const ALERT_FIELDS = "patientId patientName vaccineName recommendedAge dueDate status";
 
 // Bad id (e.g. /alerts/abc) => clear 400 error instead of a 500
 const assertValidId = (id) => {
@@ -14,11 +18,14 @@ const assertValidId = (id) => {
     }
 };
 
-const parsePositiveInt = (value, fallback, fieldName) => {
+const parsePositiveInt = (value, fallback, fieldName, max) => {
     if (value === undefined) return fallback;
 
     if (typeof value !== "string" || !/^\d+$/.test(value) || Number(value) < 1) {
         throw new ApiError(400, `"${fieldName}" must be a positive whole number.`);
+    }
+    if (max !== undefined && Number(value) > max) {
+        throw new ApiError(400, `"${fieldName}" cannot be greater than ${max}.`);
     }
     return Number(value);
 };
@@ -46,19 +53,20 @@ const getAlerts = asyncHandler(async (req, res) => {
 
     const filter = { doctorId, dueDate: { $gte: start, $lt: end } };
 
-    const page = parsePositiveInt(req.query.page, 1, "page");
+    const page = parsePositiveInt(req.query.page, 1, "page", MAX_PAGE);
     const limit = Math.min(parsePositiveInt(req.query.limit, DEFAULT_LIMIT, "limit"), MAX_LIMIT);
 
-    const [alerts, total, unreadCount] = await Promise.all([
-        Alert.find(filter)
-            .sort({ dueDate: 1, patientName: 1, _id: 1 })
-            .skip((page - 1) * limit)
-            .limit(limit)
-            .lean(),
-        Alert.countDocuments(filter),
-        // For the header badge: not tied to the selected date, all unread alerts of this doctor
-        Alert.countDocuments({ doctorId, status: "unread" })
-    ]);
+    const alerts = await Alert.find(filter)
+        .select(ALERT_FIELDS)
+        .sort({ dueDate: 1, patientName: 1, _id: 1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean();
+
+    // A page that is not full already tells us the total, so the count query is skipped in the usual case
+    // (a day with fewer alerts than "limit"). It only runs for a full page, or for an empty page after page 1.
+    const isShortPage = alerts.length < limit && (page === 1 || alerts.length > 0);
+    const total = isShortPage ? (page - 1) * limit + alerts.length : await Alert.countDocuments(filter);
 
     return res
         .status(200)
@@ -67,9 +75,8 @@ const getAlerts = asyncHandler(async (req, res) => {
                 200,
                 {
                     alerts,
-                    unreadCount,
                     date,
-                    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+                    pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) }
                 },
                 "Alerts fetched successfully"
             )

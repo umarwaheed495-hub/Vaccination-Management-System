@@ -213,6 +213,13 @@ export const generateDueAlerts = async () => {
 
 export const startAlertScheduler = async () => {
   try {
+    // Make the alerts indexes match the model exactly: builds the new one, drops old ones nobody uses any more
+    await Alert.syncIndexes();
+  } catch (error) {
+    console.error("Alert index sync failed:", error);
+  }
+
+  try {
     // One-time clean-up of old manual alerts (they have no patient and are not used any more)
     await Alert.deleteMany({ patientId: { $exists: false } });
   } catch (error) {

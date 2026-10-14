@@ -1,5 +1,6 @@
 import React from 'react';
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { Toaster } from "sonner";
 
 // Auth & Public Pages
 import Home from "./pages/Home";
@@ -138,7 +139,13 @@ const router = createBrowserRouter([
 ]);
 
 const App = () => {
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      {/* Without this, no toast message in the whole app is ever shown */}
+      <Toaster theme="dark" richColors position="top-right" />
+    </>
+  );
 };
 
 export default App;
