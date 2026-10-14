@@ -1,27 +1,17 @@
-import { Alert, ALERT_STATUSES } from "../models/alert.model.js";
+import { Alert } from "../models/alert.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { getDayRange, getTodayString } from "../utils/alertScheduler.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
-const SORT_ORDERS = ["asc", "desc"];
 
 // Bad id (e.g. /alerts/abc) => clear 400 error instead of a 500
 const assertValidId = (id) => {
     if (!/^[a-f\d]{24}$/i.test(String(id))) {
         throw new ApiError(400, "Invalid alert id.");
     }
-};
-
-// Query value check: not given => undefined, invalid => 400
-const parseEnum = (value, allowed, fieldName) => {
-    if (value === undefined || value === "") return undefined;
-
-    if (typeof value !== "string" || !allowed.includes(value)) {
-        throw new ApiError(400, `Invalid ${fieldName}. Allowed values: ${allowed.join(", ")}.`);
-    }
-    return value;
 };
 
 const parsePositiveInt = (value, fallback, fieldName) => {
@@ -33,32 +23,40 @@ const parsePositiveInt = (value, fallback, fieldName) => {
     return Number(value);
 };
 
-// 1. Get alerts (sorted by vaccine due date + pagination) - GET /api/v1/alerts
-//    Optional query: ?status=unread&sort=asc&page=1&limit=50
-//    sort=asc  -> earliest due date first (overdue vaccines on top)  [default]
-//    sort=desc -> latest due date first
+// ?date=YYYY-MM-DD. Not given => today's date (Pakistan time, same time zone the alerts use).
+const parseDate = (value) => {
+    if (value === undefined || value === "") return getTodayString();
+
+    if (typeof value !== "string" || !getDayRange(value)) {
+        throw new ApiError(400, "Invalid date. Use the format YYYY-MM-DD (for example 2026-10-14).");
+    }
+    return value;
+};
+
+// 1. Get alerts of ONE date - GET /api/v1/alerts
+//    Optional query: ?date=2026-10-14&page=1&limit=50
+//    Only alerts whose vaccine is due on that date are returned. Without ?date= it is today.
+//    There are no status / sort options: the order is fixed (due date, then patient name).
 //    Alerts are created automatically by utils/alertScheduler.js
 const getAlerts = asyncHandler(async (req, res) => {
     const doctorId = req.doctor._id;
 
-    const filter = { doctorId };
+    const date = parseDate(req.query.date);
+    const { start, end } = getDayRange(date);
 
-    const status = parseEnum(req.query.status, ALERT_STATUSES, "status");
-    const sort = parseEnum(req.query.sort, SORT_ORDERS, "sort") || "asc";
-
-    if (status) filter.status = status;
+    const filter = { doctorId, dueDate: { $gte: start, $lt: end } };
 
     const page = parsePositiveInt(req.query.page, 1, "page");
     const limit = Math.min(parsePositiveInt(req.query.limit, DEFAULT_LIMIT, "limit"), MAX_LIMIT);
 
     const [alerts, total, unreadCount] = await Promise.all([
         Alert.find(filter)
-            .sort({ dueDate: sort === "desc" ? -1 : 1, _id: 1 })
+            .sort({ dueDate: 1, patientName: 1, _id: 1 })
             .skip((page - 1) * limit)
             .limit(limit)
             .lean(),
         Alert.countDocuments(filter),
-        // For the header badge: independent of filters, all unread alerts of this doctor
+        // For the header badge: not tied to the selected date, all unread alerts of this doctor
         Alert.countDocuments({ doctorId, status: "unread" })
     ]);
 
@@ -70,6 +68,7 @@ const getAlerts = asyncHandler(async (req, res) => {
                 {
                     alerts,
                     unreadCount,
+                    date,
                     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
                 },
                 "Alerts fetched successfully"

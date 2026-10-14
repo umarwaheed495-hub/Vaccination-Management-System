@@ -4,6 +4,7 @@ import { Vaccination } from "../models/vaccination.model.js";
 import { VaccineBrand } from "../models/vaccineBrand.model.js";
 import { Alert } from "../models/alert.model.js";
 import { calculateDueDate } from "../utils/dueDate.js";
+import { syncAlerts } from "../utils/alertScheduler.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -72,6 +73,9 @@ const addPatient = asyncHandler(async (req, res) => {
   if (!newPatient) {
     throw new ApiError(500, "Database Error: Failed to register patient in the database.");
   }
+
+  // Create this patient's due / overdue vaccine alerts now (runs in background, no waiting)
+  syncAlerts({ patientId: newPatient._id });
 
   return res
     .status(201)
@@ -270,6 +274,9 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
   // Vaccine administered -> its alert is no longer needed
   if (newStatus === "Given") {
     await Alert.deleteOne({ patientId: patient._id, scheduleId: vaccineEntry.scheduleId });
+  } else if (oldStatus === "Given") {
+    // Given -> Pending: the vaccine is due again, bring its alert back (background)
+    syncAlerts({ patientId: patient._id });
   }
 
   await patient.populate("patientVaccines.scheduleId");
@@ -333,6 +340,9 @@ const updatePatient = asyncHandler(async (req, res) => {
     // Updated populated object dobara fetch karein taake client ko complete data mile
     updatedPatient = await Patient.findById(id).populate("patientVaccines.scheduleId");
   }
+
+  // Name or date of birth may have changed -> refresh this patient's alerts (background)
+  syncAlerts({ patientId: id });
 
   return res
     .status(200)
