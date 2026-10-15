@@ -1,4 +1,4 @@
-import { Patient } from "../models/patient.model.js";
+import { Patient, EMAIL_REGEX } from "../models/patient.model.js";
 import { Clinic } from "../models/clinic.model.js";
 import { Vaccination } from "../models/vaccination.model.js";
 import { VaccineBrand } from "../models/vaccineBrand.model.js";
@@ -26,16 +26,21 @@ const addPatient = asyncHandler(async (req, res) => {
     fatherCnic,
     city,
     phone,
+    email,
     clinicId,
   } = req.body;
 
   // 1. Strict Input Validation (Check for empty fields)
   if (
-    [patientName, fatherName, dateOfBirth, fatherCnic, city, phone, clinicId].some(
+    [patientName, fatherName, dateOfBirth, fatherCnic, city, phone, email, clinicId].some(
       (field) => !field || field?.toString().trim() === ""
     )
   ) {
     throw new ApiError(400, "Validation Failed: All required fields must be provided.");
+  }
+
+  if (!EMAIL_REGEX.test(email.toString().trim())) {
+    throw new ApiError(400, "Validation Failed: Please enter a valid email address.");
   }
 
   // 2. Verify Clinic Existence & Authorization
@@ -65,6 +70,7 @@ const addPatient = asyncHandler(async (req, res) => {
     fatherCnic: fatherCnic.trim(),
     city: city.trim(),
     phone: phone.trim(),
+    email: email.toString().trim().toLowerCase(),
     clinicId,
     doctorId,
   });
@@ -146,7 +152,7 @@ const getPatientVaccinationCard = asyncHandler(async (req, res) => {
   });
 
   patient.patientVaccines = updatedPatientVaccines;
-  await patient.save();
+  await patient.save({ validateModifiedOnly: true });
 
   const populatedPatient = await Patient.findById(patientId)
     .populate("patientVaccines.scheduleId")
@@ -269,7 +275,7 @@ const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
 
   // =========================================================================
 
-  await patient.save();
+  await patient.save({ validateModifiedOnly: true });
 
   // Vaccine administered -> its alert is no longer needed
   if (newStatus === "Given") {
@@ -303,6 +309,17 @@ const updatePatient = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Patient not found or unauthorized access.");
   }
 
+  // Email is mandatory on every update (the edit form always sends it).
+  // Without this check, a request that simply leaves "email" out would skip the schema validator.
+  const rawEmail = req.body.email;
+  if (typeof rawEmail !== "string" || rawEmail.trim() === "") {
+    throw new ApiError(400, "Validation Failed: Email is required.");
+  }
+  if (!EMAIL_REGEX.test(rawEmail.trim())) {
+    throw new ApiError(400, "Validation Failed: Please enter a valid email address.");
+  }
+  req.body.email = rawEmail.trim().toLowerCase();
+
   // 1. Pehle normal fields update perform karein
   let updatedPatient = await Patient.findByIdAndUpdate(
     id,
@@ -335,7 +352,7 @@ const updatePatient = asyncHandler(async (req, res) => {
     });
 
     // 4. Recalculate kiye hue dates ke sath patient record ko save kar dein
-    await updatedPatient.save();
+    await updatedPatient.save({ validateModifiedOnly: true });
 
     // Updated populated object dobara fetch karein taake client ko complete data mile
     updatedPatient = await Patient.findById(id).populate("patientVaccines.scheduleId");

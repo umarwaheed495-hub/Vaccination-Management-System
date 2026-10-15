@@ -20,6 +20,7 @@ const EditPatient = () => {
     fatherCnic: '',
     city: '',
     phone: '',
+    email: '',
   });
 
   // 1. Agar location state mein patient data mojood hai toh form fill kar dein, warna API se fetch karein
@@ -39,6 +40,7 @@ const EditPatient = () => {
             fatherCnic: p.fatherCnic || '',
             city: p.city || '',
             phone: p.phone || '',
+            email: p.email || '',
           });
         } else {
           // Agar direct URL se aya hai toh backend se patient data fetch karein
@@ -55,6 +57,7 @@ const EditPatient = () => {
               fatherCnic: p.fatherCnic || '',
               city: p.city || '',
               phone: p.phone || '',
+            email: p.email || '',
             });
           }
         }
@@ -79,13 +82,18 @@ const EditPatient = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!formData.email.trim()) {
+      toast.error("Email is required.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       const token = localStorage.getItem('token');
 
       const response = await axios.put(
         `/api/v1/patients/update/${patientId}`,
-        formData,
+        { ...formData, email: formData.email.trim() },
         {
           headers: { Authorization: `Bearer ${token}` },
           withCredentials: true,
@@ -237,6 +245,23 @@ const EditPatient = () => {
                   className="w-full bg-slate-900 border border-slate-700/80 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition"
                 />
               </div>
+            </div>
+
+            {/* Email */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="Enter Patient Email"
+                required
+                autoComplete="off"
+                className="w-full bg-slate-900 border border-slate-700/80 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition"
+              />
             </div>
 
             {/* Action Buttons */}

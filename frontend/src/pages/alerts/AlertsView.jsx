@@ -1,16 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import {
-  BellOff,
-  CheckCheck,
-  Clock,
-  TriangleAlert,
-  Syringe,
-  User,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { BellOff, Clock, Mail, TriangleAlert, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
@@ -30,8 +21,6 @@ const EMPTY_VIEW = {
 
 const dateInputClass =
   'block w-fit bg-slate-900 border border-slate-800 hover:border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl px-4 py-2.5 text-sm text-slate-100 outline-none transition-all cursor-pointer';
-
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 // Today's date as "YYYY-MM-DD" using the device's local date (not UTC, which can be yesterday early in the morning)
 const getLocalToday = () => {
@@ -59,6 +48,8 @@ const startOfDay = (ms) => {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 };
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
 const sameData = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const setAlertStatus = (view, id, status) => ({
@@ -67,6 +58,7 @@ const setAlertStatus = (view, id, status) => ({
 });
 
 // How urgent is this alert right now? Alerts exist from the start of the due day onwards.
+// Overdue -> red warning icon, due today -> amber clock icon.
 const getUrgency = (dueIso, now) => {
   const daysLate = Math.round((startOfDay(now) - startOfDay(new Date(dueIso).getTime())) / DAY);
 
@@ -76,7 +68,6 @@ const getUrgency = (dueIso, now) => {
       label: `Overdue by ${plural(daysLate, 'day')}`,
       border: 'border-l-red-500',
       iconBox: 'bg-red-500/10 text-red-400 border-red-500/30',
-      tag: 'bg-red-500/10 text-red-400 border-red-500/20',
     };
   }
 
@@ -85,9 +76,43 @@ const getUrgency = (dueIso, now) => {
     label: 'Due today',
     border: 'border-l-amber-500',
     iconBox: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    tag: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
   };
 };
+
+// Registered phone number -> WhatsApp format (country code + number, digits only).
+// Numbers are stored as typed at registration, e.g. 0300 1234567, +92 300 1234567, 03001234567.
+// A number without a country code is treated as a Pakistan number. Returns '' if it cannot be used.
+const toWhatsAppNumber = (phone) => {
+  let digits = String(phone ?? '').replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  else if (digits.startsWith('0')) digits = `92${digits.slice(1)}`;
+  else if (digits.length === 10 && digits.startsWith('3')) digits = `92${digits}`;
+  return digits.length >= 10 && digits.length <= 15 ? digits : '';
+};
+
+// Default message that is pre-filled in WhatsApp
+const buildWhatsAppMessage = (alert) =>
+  `Assalam o Alaikum! This is a reminder from your doctor's clinic that the ${alert.vaccineName} vaccine ` +
+  `for ${alert.patientName} is due. Please visit the clinic at your earliest convenience to get the vaccine. Thank you.`;
+
+const getEmailLink = (alert) => {
+  const email = String(alert.patientEmail ?? '').trim();
+  if (!email) return '';
+  const subject = `Vaccine due: ${alert.vaccineName} for ${alert.patientName}`;
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(buildWhatsAppMessage(alert))}`;
+};
+
+const getWhatsAppLink = (alert) => {
+  const number = toWhatsAppNumber(alert.patientPhone);
+  return number ? `https://wa.me/${number}?text=${encodeURIComponent(buildWhatsAppMessage(alert))}` : '';
+};
+
+// WhatsApp logo (lucide has no brand icons)
+const WhatsAppIcon = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48 0 1.46 1.07 2.88 1.22 3.08.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.08 1.76-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35M12.04 21.8c-1.75 0-3.46-.47-4.96-1.36l-.36-.21-3.69.97.99-3.6-.23-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88 2.64 0 5.12 1.03 6.99 2.9a9.82 9.82 0 0 1 2.89 6.99c0 5.45-4.44 9.88-9.99 9.88m8.41-18.3A11.82 11.82 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.89 0-3.18-1.24-6.16-3.49-8.41" />
+  </svg>
+);
 
 const AlertsView = () => {
   const navigate = useNavigate();
@@ -180,15 +205,45 @@ const AlertsView = () => {
     setRefreshKey((k) => k + 1);
   };
 
-  // 3. Mark as read: shown immediately, undone if the server says no
-  const handleMarkAsRead = async (id) => {
-    setView((prev) => setAlertStatus(prev, id, 'read'));
-    try {
-      await axios.patch(`/api/v1/alerts/${id}/read`, {}, { withCredentials: true });
-    } catch (err) {
-      console.error('Error marking alert as read:', err);
-      setView((prev) => setAlertStatus(prev, id, 'unread'));
-      toast.error(err.response?.data?.message || 'Failed to mark alert as read.');
+  // 3. Open the patient's vaccination card. The alert is marked as read at the same time
+  //    (shown immediately, undone if the server says no). The mark-as-read call never blocks the navigation.
+  const openPatientCard = (alert) => {
+    if (alert.status === 'unread') {
+      setView((prev) => setAlertStatus(prev, alert._id, 'read'));
+      axios.patch(`/api/v1/alerts/${alert._id}/read`, {}, { withCredentials: true }).catch((err) => {
+        console.error('Error marking alert as read:', err);
+      });
+    }
+    navigate(`/dashboard/patient-vaccination/${alert.patientId}`);
+  };
+
+  // Keyboard support for the clickable card (ignore keys pressed on the Email / WhatsApp buttons inside it)
+  const handleCardKeyDown = (e, alert) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openPatientCard(alert);
+    }
+  };
+
+  // Icon clicks must never open the vaccination card
+  const stop = (e) => e.stopPropagation();
+
+  const handleEmailClick = (e, link) => {
+    e.stopPropagation();
+    if (!link) {
+      e.preventDefault();
+      toast.error('No email address is registered for this patient. Add it from Edit Patient.', {
+        id: 'alert-email-error',
+      });
+    }
+  };
+
+  const handleWhatsAppClick = (e, link) => {
+    e.stopPropagation();
+    if (!link) {
+      e.preventDefault();
+      toast.error('This patient has no valid phone number for WhatsApp.', { id: 'alert-wa-error' });
     }
   };
 
@@ -217,14 +272,15 @@ const AlertsView = () => {
           {[1, 2, 3, 4].map((item) => (
             <div
               key={item}
-              className="animate-pulse bg-slate-900 border border-slate-800 border-l-4 border-l-slate-700 rounded-2xl p-5 flex gap-4"
+              className="animate-pulse bg-slate-900 border border-slate-800 border-l-4 border-l-slate-700 rounded-2xl p-5 flex items-center gap-4"
             >
               <div className="h-10 w-10 bg-slate-800 rounded-xl shrink-0"></div>
               <div className="flex-1 space-y-3">
                 <div className="h-4 bg-slate-800 rounded w-1/3"></div>
                 <div className="h-3 bg-slate-800 rounded w-1/2"></div>
-                <div className="h-3 bg-slate-800 rounded w-1/4"></div>
               </div>
+              <div className="h-10 w-10 bg-slate-800 rounded-xl shrink-0"></div>
+              <div className="h-10 w-10 bg-slate-800 rounded-xl shrink-0"></div>
             </div>
           ))}
         </div>
@@ -257,75 +313,67 @@ const AlertsView = () => {
             const urgency = getUrgency(alert.dueDate, now);
             const UrgencyIcon = urgency.icon;
             const isUnread = alert.status === 'unread';
+            const emailLink = getEmailLink(alert);
+            const whatsAppLink = getWhatsAppLink(alert);
 
             return (
               <li
                 key={alert._id}
-                className={`flex flex-col sm:flex-row sm:items-center gap-4 border border-slate-800 border-l-4 ${urgency.border} rounded-2xl p-5 shadow-xl ${
+                role="link"
+                tabIndex={0}
+                aria-label={`Open vaccination card of ${alert.patientName}`}
+                onClick={() => openPatientCard(alert)}
+                onKeyDown={(e) => handleCardKeyDown(e, alert)}
+                className={`flex items-center gap-4 border border-slate-800 border-l-4 ${urgency.border} rounded-2xl p-4 sm:p-5 shadow-xl cursor-pointer transition-colors hover:border-slate-700 hover:bg-slate-800/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                   isUnread ? 'bg-slate-900' : 'bg-slate-900/50'
                 }`}
               >
-                {/* Urgency icon */}
-                <div className={`p-2.5 rounded-xl border shrink-0 w-fit ${urgency.iconBox}`}>
+                {/* Urgency icon: red warning = overdue, amber clock = due today */}
+                <div
+                  role="img"
+                  aria-label={urgency.label}
+                  title={urgency.label}
+                  className={`p-2.5 rounded-xl border shrink-0 ${urgency.iconBox}`}
+                >
                   <UrgencyIcon className="w-5 h-5" />
                 </div>
 
-                {/* Content */}
+                {/* Patient name + due vaccine */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {isUnread && (
-                      <span
-                        role="img"
-                        aria-label="Unread"
-                        title="Unread"
-                        className="w-2 h-2 rounded-full bg-blue-500 shrink-0"
-                      />
-                    )}
-                    <h3
-                      className={`text-base break-words ${
-                        isUnread ? 'font-bold text-white' : 'font-medium text-slate-400'
-                      }`}
-                    >
-                      {alert.vaccineName}
-                    </h3>
-                    <span className={`px-2 py-0.5 rounded-md text-xs font-semibold border ${urgency.tag}`}>
-                      {urgency.label}
-                    </span>
-                  </div>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-400">
-                    <span className="flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5" />
-                      {alert.patientName}
-                    </span>
-                    {alert.recommendedAge && (
-                      <span className="flex items-center gap-1.5">
-                        <Syringe className="w-3.5 h-3.5" />
-                        Recommended at {alert.recommendedAge}
-                      </span>
-                    )}
-                  </div>
+                  <h3
+                    className={`text-base break-words ${
+                      isUnread ? 'font-bold text-white' : 'font-medium text-slate-300'
+                    }`}
+                  >
+                    {alert.patientName}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-400 break-words">{alert.vaccineName}</p>
                 </div>
 
-                {/* Actions (wrap on very narrow phones instead of overflowing the card) */}
-                <div className="flex flex-wrap sm:flex-nowrap sm:flex-col gap-2 shrink-0">
-                  <Button
-                    onClick={() => navigate(`/dashboard/patient-vaccination/${alert.patientId}`)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs flex items-center gap-1.5 transition-all"
+                {/* Email + WhatsApp (right side, do not open the card) */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={emailLink || undefined}
+                    onClick={(e) => handleEmailClick(e, emailLink)}
+                    onKeyDown={stop}
+                    aria-label={`Email ${alert.patientName}`}
+                    title="Email"
+                    className="p-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 transition-colors cursor-pointer"
                   >
-                    <Syringe className="w-4 h-4" />
-                    <span>Open vaccination card</span>
-                  </Button>
-                  {isUnread && (
-                    <Button
-                      variant="outline"
-                      onClick={() => handleMarkAsRead(alert._id)}
-                      className="bg-transparent border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white rounded-xl text-xs flex items-center gap-1.5 transition-all"
-                    >
-                      <CheckCheck className="w-4 h-4" />
-                      <span>Mark as read</span>
-                    </Button>
-                  )}
+                    <Mail className="w-5 h-5" />
+                  </a>
+                  <a
+                    href={whatsAppLink || undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => handleWhatsAppClick(e, whatsAppLink)}
+                    onKeyDown={stop}
+                    aria-label={`Send WhatsApp message to ${alert.patientName}`}
+                    title="WhatsApp"
+                    className="p-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 transition-colors cursor-pointer"
+                  >
+                    <WhatsAppIcon className="w-5 h-5" />
+                  </a>
                 </div>
               </li>
             );

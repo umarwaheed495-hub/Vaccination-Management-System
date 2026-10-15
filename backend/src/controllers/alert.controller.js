@@ -1,4 +1,5 @@
 import { Alert } from "../models/alert.model.js";
+import { Patient } from "../models/patient.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -8,7 +9,7 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MAX_PAGE = 10000; // keeps "skip" far below what MongoDB accepts; no doctor has this many alerts on one day
 
-// Only the fields AlertsView shows or uses (smaller response, less data read)
+// Only the fields AlertsView shows or uses (patientPhone and patientEmail are added in getAlerts from the Patient record) (smaller response, less data read)
 const ALERT_FIELDS = "patientId patientName vaccineName recommendedAge dueDate status";
 
 // Bad id (e.g. /alerts/abc) => clear 400 error instead of a 500
@@ -62,6 +63,20 @@ const getAlerts = asyncHandler(async (req, res) => {
         .skip((page - 1) * limit)
         .limit(limit)
         .lean();
+
+    // Attach each patient's registered phone number and email (read live from the patient record, so edits to the
+    // number show up immediately). One query for the whole page, not one per alert.
+    if (alerts.length > 0) {
+        const patients = await Patient.find({ _id: { $in: alerts.map((a) => a.patientId) } })
+            .select("phone email")
+            .lean();
+        const contactById = new Map(patients.map((p) => [String(p._id), p]));
+        alerts.forEach((a) => {
+            const contact = contactById.get(String(a.patientId));
+            a.patientPhone = contact?.phone || "";
+            a.patientEmail = contact?.email || "";
+        });
+    }
 
     // A page that is not full already tells us the total, so the count query is skipped in the usual case
     // (a day with fewer alerts than "limit"). It only runs for a full page, or for an empty page after page 1.

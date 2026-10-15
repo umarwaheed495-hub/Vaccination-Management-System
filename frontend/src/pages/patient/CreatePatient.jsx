@@ -157,6 +157,7 @@ const CreatePatient = () => {
     fatherCnic: '',
     city: '',
     phone: '',
+    email: '',
     clinicId: '',
   });
 
@@ -212,13 +213,18 @@ const CreatePatient = () => {
       return;
     }
 
+    if (!formData.email.trim()) {
+      toast.error("Email is required.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       const token = localStorage.getItem('token');
 
       const response = await axios.post(
         '/api/v1/patients/add',
-        formData,
+        { ...formData, email: formData.email.trim() },
         {
           headers: { Authorization: `Bearer ${token}` },
           withCredentials: true,
@@ -390,6 +396,23 @@ const CreatePatient = () => {
                   className="w-full bg-slate-900 border border-slate-700/80 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition"
                 />
               </div>
+            </div>
+
+            {/* Email */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="Enter Patient Email"
+                required
+                autoComplete="off"
+                className="w-full bg-slate-900 border border-slate-700/80 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition"
+              />
             </div>
 
             {/* Action Buttons */}

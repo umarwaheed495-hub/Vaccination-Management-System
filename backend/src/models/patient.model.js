@@ -1,5 +1,8 @@
 import mongoose, { Schema } from "mongoose";
 
+// Simple, practical email check (something@something.tld, no spaces)
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 const patientSchema = new Schema(
   {
     patientName: {
@@ -30,6 +33,13 @@ const patientSchema = new Schema(
       type: String,
       required: [true, "Phone number is required"],
       trim: true, 
+    },
+    email: {
+      type: String,
+      required: [true, "Email is required"],
+      trim: true,
+      lowercase: true,
+      match: [EMAIL_REGEX, "Please enter a valid email address"],
     },
     clinicId: {
       type: Schema.Types.ObjectId,
