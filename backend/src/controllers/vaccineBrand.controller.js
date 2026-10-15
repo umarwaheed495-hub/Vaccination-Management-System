@@ -3,6 +3,25 @@ import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 100;
+const MAX_PAGE = 10000; // keeps "skip" far below what MongoDB accepts
+
+// Only the fields the brands pages show or edit (smaller response, less data read)
+const BRAND_FIELDS = 'vaccineName brandName manufacturer price inventory';
+
+const parsePositiveInt = (value, fallback, fieldName, max) => {
+    if (value === undefined) return fallback;
+
+    if (typeof value !== 'string' || !/^\d+$/.test(value) || Number(value) < 1) {
+        throw new ApiError(400, `"${fieldName}" must be a positive whole number.`);
+    }
+    if (max !== undefined && Number(value) > max) {
+        throw new ApiError(400, `"${fieldName}" cannot be greater than ${max}.`);
+    }
+    return Number(value);
+};
+
 
 const createBrand = asyncHandler(async (req, res) => {
     const { vaccineName, brandName, manufacturer, price, inventory } = req.body;
@@ -64,21 +83,76 @@ const createBrand = asyncHandler(async (req, res) => {
 });
 
 
+// GET /api/v1/vaccine-brands?page=1&limit=10[&vaccineName=BCG]
+// Always paginated: newest first, at most MAX_LIMIT brands per response.
 const getBrands = asyncHandler(async (req, res) => {
     const doctorId = req.doctor?._id; // Login doctor ki ID
     const { vaccineName } = req.query; // Optional filter (jaise ?vaccineName=BCG)
 
-    const query = { doctorId };
-    if (vaccineName) {
-        query.vaccineName = vaccineName.trim();
+    const page = parsePositiveInt(req.query.page, 1, 'page', MAX_PAGE);
+    const limit = Math.min(parsePositiveInt(req.query.limit, DEFAULT_LIMIT, 'limit'), MAX_LIMIT);
+
+    const filter = { doctorId };
+    if (vaccineName !== undefined) {
+        if (typeof vaccineName !== 'string') {
+            throw new ApiError(400, '"vaccineName" must be text.');
+        }
+        if (vaccineName.trim()) filter.vaccineName = vaccineName.trim();
     }
 
-    // Database se data fetch karna (.lean() se speed fast ho jati hai)
-    const brands = await VaccineBrand.find(query).sort({ createdAt: -1 }).lean();
+    const brands = await VaccineBrand.find(filter)
+        .select(BRAND_FIELDS)
+        .sort({ createdAt: -1, _id: -1 }) // _id keeps the order stable when two brands share a createdAt
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean();
+
+    // A page that is not full already tells us the total, so the count query is skipped in the usual case
+    // (the last page). It only runs for a full page, or for an empty page after page 1.
+    const isShortPage = brands.length < limit && (page === 1 || brands.length > 0);
+    const total = isShortPage
+        ? (page - 1) * limit + brands.length
+        : await VaccineBrand.countDocuments(filter);
 
     return res.status(200).json(
-        new ApiResponse(200, brands, 'Vaccine brands fetched successfully.')
+        new ApiResponse(
+            200,
+            {
+                brands,
+                pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) }
+            },
+            'Vaccine brands fetched successfully.'
+        )
     );
+});
+
+// GET /api/v1/vaccine-brands/:id - one brand (used by the Edit page, so it no longer downloads the whole list)
+const getBrandById = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    if (!/^[a-f\d]{24}$/i.test(String(id))) {
+        throw new ApiError(400, 'Invalid brand id.');
+    }
+
+    const brand = await VaccineBrand.findOne({ _id: id, doctorId: req.doctor?._id })
+        .select(BRAND_FIELDS)
+        .lean();
+
+    if (!brand) {
+        throw new ApiError(404, 'Vaccine brand not found.');
+    }
+
+    return res.status(200).json(new ApiResponse(200, brand, 'Vaccine brand fetched successfully.'));
+});
+
+// GET /api/v1/vaccine-brands/prices - brandName + price of every brand (used to show prices on the
+// patient vaccination card). Not paginated on purpose: the card needs all of them, but only 2 fields each.
+const getBrandPrices = asyncHandler(async (req, res) => {
+    const prices = await VaccineBrand.find({ doctorId: req.doctor?._id })
+        .select('brandName price -_id')
+        .lean();
+
+    return res.status(200).json(new ApiResponse(200, prices, 'Vaccine brand prices fetched successfully.'));
 });
 
 
@@ -175,6 +249,8 @@ const deleteBrand = asyncHandler(async (req, res) => {
 export {
     createBrand,
     getBrands,
+    getBrandById,
+    getBrandPrices,
     updateBrand,
     deleteBrand
 };

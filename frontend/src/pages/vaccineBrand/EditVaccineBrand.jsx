@@ -25,12 +25,11 @@ const EditVaccineBrand = () => {
     const fetchBrandDetails = async () => {
       try {
         setFetching(true);
-        const response = await axios.get(`/api/v1/vaccine-brands`, {
+        const response = await axios.get(`/api/v1/vaccine-brands/${id}`, {
           withCredentials: true,
         });
-        
-        const brands = response.data?.data || [];
-        const currentBrand = brands.find((b) => b._id === id);
+
+        const currentBrand = response.data?.data;
 
         if (currentBrand) {
           setFormData({
@@ -47,6 +46,9 @@ const EditVaccineBrand = () => {
       } catch (error) {
         console.error('Error fetching brand details:', error);
         toast.error(error.response?.data?.message || 'Failed to load brand details.');
+        if (error.response?.status === 404 || error.response?.status === 400) {
+          navigate('/dashboard/vaccine-brands');
+        }
       } finally {
         setFetching(false);
       }

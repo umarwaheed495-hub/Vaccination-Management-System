@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Syringe, ArrowLeft, Calendar, ShieldCheck, User, Phone, Download, Printer } from 'lucide-react';
+import { Syringe, ArrowLeft, Calendar, ShieldCheck, User, Phone, Download } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
@@ -128,7 +128,7 @@ const PatientVaccinationCard = () => {
     }
   };
 
-  // 3. Build the PDF document (shared by Download & Print)
+  // 3. Build the PDF document (used by the PDF download)
   const buildGroupPDF = (dueDate, groupItems) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -346,22 +346,6 @@ const PatientVaccinationCard = () => {
     }
   };
 
-  // 3b. Print Handler: same PDF opens in a new tab and print dialog opens automatically
-  const printGroupPDF = (dueDate, groupItems) => {
-    try {
-      const doc = buildGroupPDF(dueDate, groupItems);
-      doc.autoPrint();
-      const pdfUrl = doc.output('bloburl');
-      const printWindow = window.open(pdfUrl, '_blank');
-      if (!printWindow) {
-        toast.error("Popup blocked. Please allow popups for this site to print.");
-      }
-    } catch (err) {
-      console.error("Failed to print PDF:", err);
-      toast.error("Failed to print report.");
-    }
-  };
-
   // Helper: Group vaccines by their Due Date
   const groupedVaccines = vaccines.reduce((groups, item) => {
     const dueDateKey = item.dueDate ? new Date(item.dueDate).toLocaleDateString() : 'N/A';
@@ -493,7 +477,7 @@ const PatientVaccinationCard = () => {
                         <span className="text-slate-400 font-normal">({groupItems.length} Vaccines)</span>
                       </div>
 
-                      {/* PDF Export & Print Buttons */}
+                      {/* PDF Export Button */}
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => downloadGroupPDF(dueDate, groupItems)}
@@ -502,15 +486,6 @@ const PatientVaccinationCard = () => {
                         >
                           <Download className="w-3.5 h-3.5" />
                           <span>PDF Report</span>
-                        </button>
-
-                        <button
-                          onClick={() => printGroupPDF(dueDate, groupItems)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-xl transition text-xs font-medium tracking-normal normal-case"
-                          title="Print status report for this due date"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                          <span>Print</span>
                         </button>
                       </div>
                     </div>
