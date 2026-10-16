@@ -4,6 +4,8 @@ import {
   getPatientsByClinic,
   getPatientVaccinationCard,
   updatePatientVaccineStatus,
+  rescheduleVaccine,
+  rescheduleVaccineGroup,
   updatePatient,
   getBrandsByVaccineName,
   deletePatient
@@ -23,6 +25,12 @@ router.route("/vaccination-card/:patientId").get(verifyJWT, authorizeRoles("doct
 
 // 4. Update Patient Vaccine Status & Given Date (New Route added)
 router.route("/vaccination-card/:patientId/vaccine/:vaccineId").patch(verifyJWT, authorizeRoles("doctor", "admin"), updatePatientVaccineStatus);
+
+// 4a. Reschedule ONE vaccine's due date
+router.route("/vaccination-card/:patientId/vaccine/:vaccineId/reschedule").patch(verifyJWT, authorizeRoles("doctor", "admin"), rescheduleVaccine);
+
+// 4b. Reschedule a whole due-date group (body: { vaccineIds: [...], dueDate })
+router.route("/vaccination-card/:patientId/reschedule").patch(verifyJWT, authorizeRoles("doctor", "admin"), rescheduleVaccineGroup);
 
 // 5. Get Vaccine Brands by Specific Vaccine Name (NEW ROUTE ADDED)
 router.route("/brands-by-name/:vaccineName").get(verifyJWT, authorizeRoles("doctor", "admin"), getBrandsByVaccineName);

@@ -60,6 +60,12 @@ const patientSchema = new Schema(
         dueDate: {
           type: Date, // Patient ki DOB aur vaccine ki age se calculate hone wali due date
         },
+        // true once the doctor moved the due date by hand (Reschedule). The alert scheduler then uses this
+        // stored dueDate instead of recalculating it from the date of birth.
+        rescheduled: {
+          type: Boolean,
+          default: false,
+        },
         givenDate: {
           type: Date, 
         },

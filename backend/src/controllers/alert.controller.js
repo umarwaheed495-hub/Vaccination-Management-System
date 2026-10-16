@@ -4,13 +4,20 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { getDayRange, getTodayString } from "../utils/alertScheduler.js";
+import { sendEmail } from "../utils/sendEmail.js";
+import { buildAlertEmail } from "../utils/alertEmail.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MAX_PAGE = 10000; // keeps "skip" far below what MongoDB accepts; no doctor has this many alerts on one day
 
-// Only the fields AlertsView shows or uses (patientPhone and patientEmail are added in getAlerts from the Patient record) (smaller response, less data read)
-const ALERT_FIELDS = "patientId patientName vaccineName recommendedAge dueDate status";
+// The ONLY place that defines the cooldown between two reminder emails for the same alert
+const EMAIL_COOLDOWN_MINUTES = 30;
+const EMAIL_COOLDOWN_MS = EMAIL_COOLDOWN_MINUTES * 60 * 1000;
+
+// Only the fields AlertsView shows or uses (smaller response, less data read).
+// emailSentAt is only read to work out emailRetryAfterSeconds; it is not sent to the client.
+const ALERT_FIELDS = "patientId patientName vaccineName recommendedAge dueDate status emailSentAt";
 
 // Bad id (e.g. /alerts/abc) => clear 400 error instead of a 500
 const assertValidId = (id) => {
@@ -30,6 +37,10 @@ const parsePositiveInt = (value, fallback, fieldName, max) => {
     }
     return Number(value);
 };
+
+// Seconds left until a new email may be sent for an alert (0 = available now)
+const getRetryAfterSeconds = (emailSentAt, nowMs) =>
+    emailSentAt ? Math.max(0, Math.ceil((new Date(emailSentAt).getTime() + EMAIL_COOLDOWN_MS - nowMs) / 1000)) : 0;
 
 // ?date=YYYY-MM-DD. Not given => today's date (Pakistan time, same time zone the alerts use).
 const parseDate = (value) => {
@@ -64,17 +75,21 @@ const getAlerts = asyncHandler(async (req, res) => {
         .limit(limit)
         .lean();
 
-    // Attach each patient's registered phone number and email (read live from the patient record, so edits to the
-    // number show up immediately). One query for the whole page, not one per alert.
+    // Attach each patient's phone number and whether an email is saved (read live from the patient record).
+    // One query for the whole page, not one per alert. The email address itself is never sent to the client.
     if (alerts.length > 0) {
         const patients = await Patient.find({ _id: { $in: alerts.map((a) => a.patientId) } })
             .select("phone email")
             .lean();
         const contactById = new Map(patients.map((p) => [String(p._id), p]));
+        const nowMs = Date.now();
+
         alerts.forEach((a) => {
             const contact = contactById.get(String(a.patientId));
             a.patientPhone = contact?.phone || "";
-            a.patientEmail = contact?.email || "";
+            a.hasEmail = Boolean(contact?.email);
+            a.emailRetryAfterSeconds = getRetryAfterSeconds(a.emailSentAt, nowMs);
+            delete a.emailSentAt;
         });
     }
 
@@ -119,7 +134,78 @@ const markAsRead = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, updatedAlert, "Alert marked as read"));
 });
 
+// 3. Send the reminder email - POST /api/v1/alerts/:id/email
+//    Nothing comes from the client except the alert id: the recipient is read from the patient record and the
+//    subject/body are built here. A cooldown (EMAIL_COOLDOWN_MINUTES) stops the same alert being emailed again.
+const sendAlertEmail = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    assertValidId(id);
+    const doctor = req.doctor;
+
+    // Only the owner of the alert can use it (anyone else gets the same 404 as a missing alert)
+    const alert = await Alert.findOne({ _id: id, doctorId: doctor._id })
+        .select("patientId patientName vaccineName dueDate")
+        .lean();
+    if (!alert) {
+        throw new ApiError(404, "Alert not found");
+    }
+
+    // Recipient is read now, from the patient record. No email => nothing is claimed, no cooldown starts.
+    const patient = await Patient.findById(alert.patientId).select("email").lean();
+    if (!patient?.email) {
+        throw new ApiError(400, "This patient has no email address.");
+    }
+
+    // Claim the cooldown in ONE atomic update before sending. Of two simultaneous requests only one matches
+    // (emailSentAt is missing or old enough); the other finds the new emailSentAt and is refused.
+    const claimedAt = new Date();
+    const previous = await Alert.findOneAndUpdate(
+        {
+            _id: id,
+            doctorId: doctor._id,
+            $or: [{ emailSentAt: null }, { emailSentAt: { $lte: new Date(claimedAt.getTime() - EMAIL_COOLDOWN_MS) } }]
+        },
+        { $set: { emailSentAt: claimedAt } },
+        { returnDocument: "before", projection: { emailSentAt: 1 } }
+    ).lean();
+
+    if (!previous) {
+        const current = await Alert.findOne({ _id: id, doctorId: doctor._id }).select("emailSentAt").lean();
+        if (!current) {
+            throw new ApiError(404, "Alert not found");
+        }
+
+        const retryAfterSeconds = Math.max(1, getRetryAfterSeconds(current.emailSentAt, Date.now()));
+        return res
+            .status(429)
+            .set("Retry-After", String(retryAfterSeconds))
+            .json(new ApiResponse(429, { retryAfterSeconds }, "An email was already sent for this alert. Please wait before sending another."));
+    }
+
+    try {
+        const { subject, html } = buildAlertEmail({ ...alert, doctorName: doctor.name });
+        await sendEmail({ email: patient.email, subject, message: html });
+    } catch (error) {
+        // Give the cooldown back so the doctor can retry. Only if it is still the one we set.
+        const restore = previous.emailSentAt
+            ? { $set: { emailSentAt: previous.emailSentAt } }
+            : { $unset: { emailSentAt: "" } };
+        await Alert.updateOne({ _id: id, emailSentAt: claimedAt }, restore).catch((restoreError) => {
+            console.error("Alert email: could not restore the cooldown:", restoreError?.name);
+        });
+
+        // Error codes only: the error message can contain the recipient address
+        console.error("Alert email failed:", { alertId: id, code: error?.code, responseCode: error?.responseCode });
+        throw new ApiError(502, "Could not send the email. Please try again.");
+    }
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, { retryAfterSeconds: EMAIL_COOLDOWN_MINUTES * 60 }, "Email sent"));
+});
+
 export {
     getAlerts,
-    markAsRead
+    markAsRead,
+    sendAlertEmail
 };

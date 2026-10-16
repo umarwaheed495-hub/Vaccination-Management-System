@@ -5,7 +5,7 @@ import { calculateDueDate } from "./dueDate.js";
 
 // The alert appears the moment the vaccine's DUE DAY starts (12:00 AM in this time zone)
 // and stays until the vaccine is given. Pakistan has no daylight saving, so the offset is fixed.
-const ALERT_TIMEZONE = "Asia/Karachi";
+export const ALERT_TIMEZONE = "Asia/Karachi";
 const ALERT_TZ_OFFSET = "+05:00";
 
 // Full check of all patients. Cheap now: when nothing changed it only READS, it writes nothing.
@@ -117,7 +117,7 @@ export const syncAlerts = async (scope = {}) => {
     };
 
     const cursor = Patient.find(patientFilter)
-      .select("patientName dateOfBirth doctorId clinicId patientVaccines.scheduleId patientVaccines.status")
+      .select("patientName dateOfBirth doctorId clinicId patientVaccines.scheduleId patientVaccines.status patientVaccines.dueDate patientVaccines.rescheduled")
       .lean()
       .cursor({ batchSize: 1000 });
 
@@ -129,16 +129,21 @@ export const syncAlerts = async (scope = {}) => {
         scheduleByDoctor.set(doctorKey, await Vaccination.find({ doctorId: patient.doctorId }).lean());
       }
 
-      const givenIds = new Set(
-        (patient.patientVaccines || [])
-          .filter((pv) => pv.status === "Given" && pv.scheduleId)
-          .map((pv) => String(pv.scheduleId))
-      );
+      // One pass over the patient's card: which vaccines are given, and which due dates the doctor moved by hand
+      const givenIds = new Set();
+      const rescheduledDue = new Map(); // scheduleId -> the due date the doctor chose
+      for (const pv of patient.patientVaccines || []) {
+        if (!pv.scheduleId) continue;
+        if (pv.status === "Given") givenIds.add(String(pv.scheduleId));
+        else if (pv.rescheduled && pv.dueDate) rescheduledDue.set(String(pv.scheduleId), new Date(pv.dueDate));
+      }
 
       for (const vaccine of scheduleByDoctor.get(doctorKey)) {
         if (givenIds.has(String(vaccine._id))) continue; // already administered -> no alert
 
-        const dueDate = calculateDueDate(patient.dateOfBirth, vaccine.recommendedAge);
+        // A rescheduled vaccine keeps the date the doctor chose; every other one follows the date of birth
+        const dueDate =
+          rescheduledDue.get(String(vaccine._id)) ?? calculateDueDate(patient.dateOfBirth, vaccine.recommendedAge);
         if (!dueDate) continue; // date of birth is not a valid date -> cannot calculate
 
         if (!isAlertWindowOpen(dueDate, startedAt)) continue; // due day has not started yet

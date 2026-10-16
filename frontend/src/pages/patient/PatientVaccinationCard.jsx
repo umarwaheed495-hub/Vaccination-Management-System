@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Syringe, ArrowLeft, Calendar, ShieldCheck, User, Phone, Download } from 'lucide-react';
+import { Syringe, ArrowLeft, Calendar, CalendarClock, ShieldCheck, User, Phone, Download } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
+import RescheduleModal from './RescheduleModal';
 
 // ---------- QR Code helpers (PDF ke liye) ----------
 // QR data generate karta hai; agar data bohot zyada ho to null return karta hai
@@ -37,6 +38,8 @@ const drawQR = (doc, qr, x, y, size) => {
   }
 };
 
+const getVaccineName = (item) => item.scheduleId?.name || item.vaccineName || 'Unknown Vaccine';
+
 const PatientVaccinationCard = () => {
   const { patientId } = useParams();
   const navigate = useNavigate();
@@ -46,6 +49,8 @@ const PatientVaccinationCard = () => {
   const [vaccines, setVaccines] = useState([]);
   const [updatingId, setUpdatingId] = useState(null);
   const [brandPrices, setBrandPrices] = useState({});
+  const [rescheduleTarget, setRescheduleTarget] = useState(null); // { items, skipped } while the dialog is open
+  const [rescheduling, setRescheduling] = useState(false);
 
   // 1. Fetch Patient Vaccination Card details from backend
   const fetchVaccinationCard = async () => {
@@ -125,6 +130,46 @@ const PatientVaccinationCard = () => {
       fetchVaccinationCard();
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  // 2a. Reschedule: open the dialog for the pending vaccines of one due-date group
+  //     (inside it the doctor ticks which of them move, so one vaccine or the whole group can be rescheduled)
+  const openReschedule = (groupItems) => {
+    const pending = groupItems.filter((item) => item.status !== 'Given');
+    if (pending.length === 0) return;
+    setRescheduleTarget({ items: pending, skipped: groupItems.length - pending.length });
+  };
+
+  const closeReschedule = useCallback(() => setRescheduleTarget(null), []);
+
+  // 2b. Send the new date; on success the card is replaced with the server's data (groups re-form by date)
+  const handleReschedule = async (newDate, vaccineIds) => {
+    const base = `/api/v1/patients/vaccination-card/${patientId}`;
+    const config = {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      withCredentials: true,
+    };
+
+    try {
+      setRescheduling(true);
+      const response =
+        vaccineIds.length === 1
+          ? await axios.patch(`${base}/vaccine/${vaccineIds[0]}/reschedule`, { dueDate: newDate }, config)
+          : await axios.patch(`${base}/reschedule`, { vaccineIds, dueDate: newDate }, config);
+
+      const updatedRecord = response.data?.data;
+      if (updatedRecord) {
+        setPatientData(updatedRecord);
+        setVaccines(updatedRecord.patientVaccines || []);
+      }
+      toast.success(response.data?.message || 'Due date rescheduled successfully.');
+      setRescheduleTarget(null);
+    } catch (error) {
+      console.error('Failed to reschedule:', error);
+      toast.error(error.response?.data?.message || 'Failed to reschedule.'); // the dialog stays open to try again
+    } finally {
+      setRescheduling(false);
     }
   };
 
@@ -477,8 +522,21 @@ const PatientVaccinationCard = () => {
                         <span className="text-slate-400 font-normal">({groupItems.length} Vaccines)</span>
                       </div>
 
-                      {/* PDF Export Button */}
+                      {/* Reschedule + PDF Export Buttons (same style) */}
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openReschedule(groupItems)}
+                          disabled={groupItems.every((item) => item.status === 'Given')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl transition text-xs font-medium tracking-normal normal-case disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600/20"
+                          title={
+                            groupItems.every((item) => item.status === 'Given')
+                              ? 'All vaccines in this group are already given'
+                              : 'Change the due date of the pending vaccines in this group'
+                          }
+                        >
+                          <CalendarClock className="w-3.5 h-3.5" />
+                          <span>Reschedule</span>
+                        </button>
                         <button
                           onClick={() => downloadGroupPDF(dueDate, groupItems)}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl transition text-xs font-medium tracking-normal normal-case"
@@ -501,7 +559,7 @@ const PatientVaccinationCard = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-800/40 text-sm">
                           {groupItems.map((item, index) => {
-                            const vaccineName = item.scheduleId?.name || item.vaccineName || 'Unknown Vaccine';
+                            const vaccineName = getVaccineName(item);
                             const isGiven = item.status === "Given";
 
                             return (
@@ -543,6 +601,17 @@ const PatientVaccinationCard = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {rescheduleTarget && (
+        <RescheduleModal
+          key={rescheduleTarget.items[0]._id}
+          target={rescheduleTarget}
+          getName={getVaccineName}
+          submitting={rescheduling}
+          onClose={closeReschedule}
+          onConfirm={handleReschedule}
+        />
       )}
     </div>
   );

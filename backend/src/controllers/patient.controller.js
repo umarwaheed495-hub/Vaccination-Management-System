@@ -4,7 +4,7 @@ import { Vaccination } from "../models/vaccination.model.js";
 import { VaccineBrand } from "../models/vaccineBrand.model.js";
 import { Alert } from "../models/alert.model.js";
 import { calculateDueDate } from "../utils/dueDate.js";
-import { syncAlerts } from "../utils/alertScheduler.js";
+import { syncAlerts, getDayRange, getTodayString } from "../utils/alertScheduler.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -345,7 +345,8 @@ const updatePatient = asyncHandler(async (req, res) => {
       const scheduleIdStr = vaccine.scheduleId ? vaccine.scheduleId.toString() : null;
       const vaccineRule = scheduleIdStr ? vaccineMap.get(scheduleIdStr) : null;
 
-      if (vaccineRule) {
+      // A due date the doctor moved by hand (Reschedule) is kept; only calculated dates follow the new birth date
+      if (vaccineRule && !vaccine.rescheduled) {
         vaccine.dueDate = calculateDueDate(newDob, vaccineRule);
       }
       return vaccine;
@@ -432,11 +433,125 @@ const deletePatient = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Patient record deleted successfully."));
 });
 
+// =========================================================================
+// RESCHEDULE - move the recommended due date of one vaccine, or of a whole due-date group
+// =========================================================================
+const MAX_RESCHEDULE_VACCINES = 100;
+const isObjectId = (value) => typeof value === "string" && /^[a-f\d]{24}$/i.test(value);
+
+// "2026-10-20" -> the Date that is stored. Rejects text that is not a real calendar date and dates in the past
+// (compared as calendar days in the clinic's time zone). Noon UTC is stored so the day looks the same in every time zone.
+const parseRescheduleDate = (value) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !getDayRange(value)) {
+    throw new ApiError(400, "A valid due date (YYYY-MM-DD) is required.");
+  }
+  if (value < getTodayString()) {
+    throw new ApiError(400, "The new due date cannot be in the past.");
+  }
+  return new Date(`${value}T12:00:00.000Z`);
+};
+
+// Shared by both reschedule endpoints. Only "Pending" vaccines move: given vaccines are skipped, and the
+// status is checked again inside the update itself, so a vaccine given a moment ago can never be moved.
+const rescheduleVaccines = async ({ patientId, doctorId, vaccineIds, dueDate }) => {
+  if (!doctorId) {
+    throw new ApiError(401, "Unauthorized request. Doctor identity missing.");
+  }
+  if (!isObjectId(patientId) || !vaccineIds.every(isObjectId)) {
+    throw new ApiError(400, "Invalid patient or vaccine id.");
+  }
+  const newDueDate = parseRescheduleDate(dueDate);
+
+  const patient = await Patient.findOne({ _id: patientId, doctorId }).select("patientVaccines").lean();
+  if (!patient) {
+    throw new ApiError(404, "Patient not found or unauthorized access.");
+  }
+
+  // A vaccine can be named by its card-entry id or by its schedule id (same as the status update route)
+  const entryByRef = new Map();
+  patient.patientVaccines.forEach((entry) => {
+    entryByRef.set(String(entry._id), entry);
+    if (entry.scheduleId) entryByRef.set(String(entry.scheduleId), entry);
+  });
+
+  const entries = new Map(); // one entry per vaccine, even if it was named twice
+  for (const ref of vaccineIds) {
+    const entry = entryByRef.get(ref);
+    if (!entry) {
+      throw new ApiError(404, "Vaccine record not found in patient's card.");
+    }
+    entries.set(String(entry._id), entry);
+  }
+
+  const pending = [...entries.values()].filter((entry) => entry.status === "Pending");
+  if (pending.length === 0) {
+    throw new ApiError(400, "Given vaccines cannot be rescheduled. Mark the vaccine as Pending first.");
+  }
+
+  await Patient.updateOne(
+    { _id: patient._id, doctorId },
+    { $set: { "patientVaccines.$[v].dueDate": newDueDate, "patientVaccines.$[v].rescheduled": true } },
+    { arrayFilters: [{ "v._id": { $in: pending.map((entry) => entry._id) }, "v.status": "Pending" }] }
+  );
+
+  // The alerts follow the new dates (background): a vaccine moved to the future loses its alert, one moved to today gets it
+  syncAlerts({ patientId: patient._id });
+
+  // Same shape as the vaccination card endpoint, so the page can replace its data with this response
+  const updatedPatient = await Patient.findById(patient._id)
+    .populate("patientVaccines.scheduleId")
+    .populate("clinicId", "clinicName")
+    .populate("doctorId", "name");
+
+  return { updatedPatient, moved: pending.length, skipped: entries.size - pending.length };
+};
+
+// PATCH /vaccination-card/:patientId/vaccine/:vaccineId/reschedule   body: { dueDate: "YYYY-MM-DD" }
+const rescheduleVaccine = asyncHandler(async (req, res) => {
+  const { patientId, vaccineId } = req.params;
+
+  const { updatedPatient } = await rescheduleVaccines({
+    patientId,
+    doctorId: req.doctor?._id || req.user?._id,
+    vaccineIds: [vaccineId],
+    dueDate: req.body?.dueDate,
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, updatedPatient, "Vaccine rescheduled successfully."));
+});
+
+// PATCH /vaccination-card/:patientId/reschedule   body: { vaccineIds: [...], dueDate: "YYYY-MM-DD" }
+const rescheduleVaccineGroup = asyncHandler(async (req, res) => {
+  const { patientId } = req.params;
+  const { vaccineIds, dueDate } = req.body ?? {};
+
+  if (!Array.isArray(vaccineIds) || vaccineIds.length === 0 || vaccineIds.length > MAX_RESCHEDULE_VACCINES) {
+    throw new ApiError(400, `Send between 1 and ${MAX_RESCHEDULE_VACCINES} vaccine ids.`);
+  }
+
+  const { updatedPatient, moved, skipped } = await rescheduleVaccines({
+    patientId,
+    doctorId: req.doctor?._id || req.user?._id,
+    vaccineIds,
+    dueDate,
+  });
+
+  const message =
+    `${moved} vaccine${moved === 1 ? "" : "s"} rescheduled successfully.` +
+    (skipped > 0 ? ` ${skipped} already given ${skipped === 1 ? "was" : "were"} left unchanged.` : "");
+
+  return res.status(200).json(new ApiResponse(200, updatedPatient, message));
+});
+
 export {
   addPatient,
   getPatientsByClinic,
   getPatientVaccinationCard,
   updatePatientVaccineStatus,
+  rescheduleVaccine,
+  rescheduleVaccineGroup,
   updatePatient,
   getBrandsByVaccineName,
   deletePatient

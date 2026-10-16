@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { BellOff, Clock, Mail, TriangleAlert, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BellOff, Clock, Loader2, Mail, TriangleAlert, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
@@ -11,6 +11,9 @@ const DATE_DEBOUNCE_MS = 350; // wait until the user stops typing a date before 
 const MIN_DATE = '1900-01-01';
 const MAX_DATE = '2100-12-31';
 const DAY = 24 * 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const COOLDOWN_JITTER_MS = 5000; // a new server value replaces the local deadline only if it differs by more than this
+const TICK_MARGIN_MS = 50; // the timer fires just after the boundary, never just before it
 
 const EMPTY_VIEW = {
   key: '', // which date + page this data belongs to ('' = nothing loaded yet)
@@ -95,11 +98,65 @@ const buildWhatsAppMessage = (alert) =>
   `Assalam o Alaikum! This is a reminder from your doctor's clinic that the ${alert.vaccineName} vaccine ` +
   `for ${alert.patientName} is due. Please visit the clinic at your earliest convenience to get the vaccine. Thank you.`;
 
-const getEmailLink = (alert) => {
-  const email = String(alert.patientEmail ?? '').trim();
-  if (!email) return '';
-  const subject = `Vaccine due: ${alert.vaccineName} for ${alert.patientName}`;
-  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(buildWhatsAppMessage(alert))}`;
+// ---- Email cooldown -------------------------------------------------------------------------------
+// The server sends "emailRetryAfterSeconds" (relative seconds, so a wrong device clock cannot break it).
+// It is turned into a local deadline once. state = { deadlines: { [alertId]: epoch ms }, clock: epoch ms }.
+
+// "emailRetryAfterSeconds" counts down on every refresh, so it is removed before comparing old and new data
+const withoutRetry = (alert) => {
+  const copy = { ...alert };
+  delete copy.emailRetryAfterSeconds;
+  return copy;
+};
+
+// Take the deadlines from a server response. Returns the SAME state when nothing really changed,
+// so a silent background refresh does not re-render the page.
+const syncCooldowns = (state, alerts, receivedAt) => {
+  const deadlines = { ...state.deadlines };
+  let changed = false;
+
+  alerts.forEach((a) => {
+    const local = deadlines[a._id];
+    if (a.emailRetryAfterSeconds > 0) {
+      const fromServer = receivedAt + a.emailRetryAfterSeconds * 1000;
+      if (local === undefined || Math.abs(local - fromServer) > COOLDOWN_JITTER_MS) {
+        deadlines[a._id] = fromServer;
+        changed = true;
+      }
+    } else if (local !== undefined) {
+      delete deadlines[a._id];
+      changed = true;
+    }
+  });
+
+  return changed ? { deadlines, clock: receivedAt } : state;
+};
+
+const withCooldown = (state, id, seconds) => {
+  const nowMs = Date.now();
+  return { deadlines: { ...state.deadlines, [id]: nowMs + seconds * 1000 }, clock: nowMs };
+};
+
+const tickClock = (state) => ({ ...state, clock: Date.now() });
+
+// Milliseconds until the screen must be refreshed next: when a deadline passes, or when the "N min" text of a
+// running cooldown changes. One timer is enough: it is always set for the nearest of these moments.
+const getNextTickDelay = (deadlines, nowMs) => {
+  let delay = null;
+  Object.values(deadlines).forEach((deadline) => {
+    const remaining = deadline - nowMs;
+    if (remaining <= 0) return;
+    const untilChange = ((remaining - 1) % MINUTE) + 1;
+    if (delay === null || untilChange < delay) delay = untilChange;
+  });
+  return delay === null ? null : delay + TICK_MARGIN_MS;
+};
+
+// Why the Email button is not available ('' = it is available)
+const getEmailBlockedReason = (alert, deadline, clock) => {
+  if (!alert.hasEmail) return 'No email saved for this patient';
+  if (deadline > clock) return `Available again in ${Math.ceil((deadline - clock) / MINUTE)} min`;
+  return '';
 };
 
 const getWhatsAppLink = (alert) => {
@@ -123,6 +180,8 @@ const AlertsView = () => {
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const [cooldowns, setCooldowns] = useState(() => ({ deadlines: {}, clock: Date.now() }));
+  const [sendingIds, setSendingIds] = useState({}); // alert ids whose email request is running
 
   // Loading is derived: the data on screen belongs to another date/page until the new response arrives
   const loading = view.key !== `${date}|${page}`;
@@ -152,8 +211,10 @@ const AlertsView = () => {
           return;
         }
 
+        setCooldowns((prev) => syncCooldowns(prev, data.alerts, Date.now()));
+
         // Same data as before -> keep the old state, so React does not re-render for nothing
-        const next = { key, alerts: data.alerts, pagination: data.pagination, error: '' };
+        const next = { key, alerts: data.alerts.map(withoutRetry), pagination: data.pagination, error: '' };
         setView((prev) => (sameData(prev, next) ? prev : next));
         setNow((prev) => (startOfDay(prev) === startOfDay(Date.now()) ? prev : Date.now()));
       } catch (err) {
@@ -195,6 +256,23 @@ const AlertsView = () => {
     return () => clearTimeout(timer);
   }, [dateInput, date]);
 
+  // 3. ONE timer, set for the nearest moment the Email buttons need a refresh (cleaned up on unmount)
+  useEffect(() => {
+    const delay = getNextTickDelay(cooldowns.deadlines, Date.now());
+    if (delay === null) return;
+    const timer = setTimeout(() => setCooldowns(tickClock), delay);
+    return () => clearTimeout(timer);
+  }, [cooldowns]);
+
+  // Timers are slowed down in a hidden tab, so check the time again as soon as the tab is visible
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) setCooldowns(tickClock);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   // Box left empty or half-typed when the user clicks away -> show the date that is really loaded
   const handleDateBlur = () => {
     if (!isUsableDate(dateInput)) setDateInput(date);
@@ -205,7 +283,7 @@ const AlertsView = () => {
     setRefreshKey((k) => k + 1);
   };
 
-  // 3. Open the patient's vaccination card. The alert is marked as read at the same time
+  // 4. Open the patient's vaccination card. The alert is marked as read at the same time
   //    (shown immediately, undone if the server says no). The mark-as-read call never blocks the navigation.
   const openPatientCard = (alert) => {
     if (alert.status === 'unread') {
@@ -229,13 +307,34 @@ const AlertsView = () => {
   // Icon clicks must never open the vaccination card
   const stop = (e) => e.stopPropagation();
 
-  const handleEmailClick = (e, link) => {
+  const setSending = (id, isSending) =>
+    setSendingIds((prev) => {
+      const next = { ...prev };
+      if (isSending) next[id] = true;
+      else delete next[id];
+      return next;
+    });
+
+  const startCooldown = (id, seconds) => {
+    if (seconds > 0) setCooldowns((prev) => withCooldown(prev, id, seconds));
+  };
+
+  // Send the reminder email from the server. Never opens the patient card and never leaves the page.
+  const handleSendEmail = async (e, alert, disabled) => {
     e.stopPropagation();
-    if (!link) {
-      e.preventDefault();
-      toast.error('No email address is registered for this patient. Add it from Edit Patient.', {
-        id: 'alert-email-error',
-      });
+    if (disabled) return;
+
+    setSending(alert._id, true);
+    try {
+      const response = await axios.post(`/api/v1/alerts/${alert._id}/email`, {}, { withCredentials: true });
+      startCooldown(alert._id, response.data?.data?.retryAfterSeconds);
+      toast.success(`Email sent to ${alert.patientName}`);
+    } catch (err) {
+      // 429 = another tab / click already sent it: follow the server's remaining time
+      if (err.response?.status === 429) startCooldown(alert._id, err.response.data?.data?.retryAfterSeconds);
+      toast.error(err.response?.data?.message || 'Failed to send the email.', { id: `alert-email-${alert._id}` });
+    } finally {
+      setSending(alert._id, false);
     }
   };
 
@@ -313,7 +412,9 @@ const AlertsView = () => {
             const urgency = getUrgency(alert.dueDate, now);
             const UrgencyIcon = urgency.icon;
             const isUnread = alert.status === 'unread';
-            const emailLink = getEmailLink(alert);
+            const emailBlockedReason = getEmailBlockedReason(alert, cooldowns.deadlines[alert._id] ?? 0, cooldowns.clock);
+            const isSendingEmail = Boolean(sendingIds[alert._id]);
+            const emailDisabled = isSendingEmail || Boolean(emailBlockedReason);
             const whatsAppLink = getWhatsAppLink(alert);
 
             return (
@@ -350,18 +451,27 @@ const AlertsView = () => {
                   <p className="mt-1 text-sm text-slate-400 break-words">{alert.vaccineName}</p>
                 </div>
 
-                {/* Email + WhatsApp (right side, do not open the card) */}
+                {/* Email (sent by the server) + WhatsApp (right side, do not open the card) */}
                 <div className="flex items-center gap-2 shrink-0">
-                  <a
-                    href={emailLink || undefined}
-                    onClick={(e) => handleEmailClick(e, emailLink)}
-                    onKeyDown={stop}
-                    aria-label={`Email ${alert.patientName}`}
-                    title="Email"
-                    className="p-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 transition-colors cursor-pointer"
+                  <button
+                    type="button"
+                    onClick={(e) => handleSendEmail(e, alert, emailDisabled)}
+                    aria-label={
+                      emailBlockedReason
+                        ? `Email ${alert.patientName}: ${emailBlockedReason}`
+                        : `Send email to ${alert.patientName}`
+                    }
+                    aria-disabled={emailDisabled}
+                    aria-busy={isSendingEmail}
+                    title={isSendingEmail ? 'Sending email...' : emailBlockedReason || 'Send email'}
+                    className={`p-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-400 transition-colors ${
+                      emailDisabled
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'hover:bg-blue-500/20 hover:text-blue-300 cursor-pointer'
+                    }`}
                   >
-                    <Mail className="w-5 h-5" />
-                  </a>
+                    {isSendingEmail ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
+                  </button>
                   <a
                     href={whatsAppLink || undefined}
                     target="_blank"

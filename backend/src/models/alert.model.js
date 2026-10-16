@@ -59,6 +59,11 @@ const alertSchema = new mongoose.Schema(
                 message: "Status must be either unread or read"
             },
             default: "unread"
+        },
+
+        // When the reminder email was last sent. Used for the cooldown (see EMAIL_COOLDOWN_MINUTES in the alert controller).
+        emailSentAt: {
+            type: Date
         }
     },
     {
