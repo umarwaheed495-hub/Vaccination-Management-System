@@ -48,7 +48,7 @@ const PatientVaccinationCard = () => {
   const [patientData, setPatientData] = useState(null);
   const [vaccines, setVaccines] = useState([]);
   const [updatingId, setUpdatingId] = useState(null);
-  const [brandPrices, setBrandPrices] = useState({});
+  const [brandPrices, setBrandPrices] = useState(null); // brandName -> price; null until the prices have loaded
   const [rescheduleTarget, setRescheduleTarget] = useState(null); // { items, skipped } while the dialog is open
   const [rescheduling, setRescheduling] = useState(false);
 
@@ -77,11 +77,12 @@ const PatientVaccinationCard = () => {
     }
   };
 
-  // Fetch vaccine brand prices (brandName -> price)
+  // Fetch vaccine brand prices (brandName -> price). Uses the dedicated prices endpoint: the brands list
+  // is paginated and returns { brands, pagination }, so it cannot be used to look up every brand's price.
   const fetchBrandPrices = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/v1/vaccine-brands', {
+      const response = await axios.get('/api/v1/vaccine-brands/prices', {
         headers: { Authorization: `Bearer ${token}` },
         withCredentials: true,
       });
@@ -381,6 +382,12 @@ const PatientVaccinationCard = () => {
 
   // 3a. PDF Download Handler for a Specific Due Date Group
   const downloadGroupPDF = (dueDate, groupItems) => {
+    // Without the prices the report would show "0" for every given vaccine, so do not create a wrong PDF
+    if (brandPrices === null) {
+      toast.error('Brand prices are not loaded yet. Please refresh the page and try again.');
+      return;
+    }
+
     try {
       const doc = buildGroupPDF(dueDate, groupItems);
       doc.save(`Vaccination_Report_${dueDate.replace(/\//g, '-')}.pdf`);

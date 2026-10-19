@@ -55,6 +55,7 @@ const parseDate = (value) => {
 // 1. Get alerts of ONE date - GET /api/v1/alerts
 //    Optional query: ?date=2026-10-14&page=1&limit=50
 //    Only alerts whose vaccine is due on that date are returned. Without ?date= it is today.
+//    Any date works: a past day (overdue), today, or a future day (upcoming - the scheduler creates the alerts ahead of time).
 //    There are no status / sort options: the order is fixed (due date, then patient name).
 //    Alerts are created automatically by utils/alertScheduler.js
 const getAlerts = asyncHandler(async (req, res) => {

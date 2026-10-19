@@ -3,8 +3,9 @@ import { Patient } from "../models/patient.model.js";
 import { Vaccination } from "../models/vaccination.model.js";
 import { calculateDueDate } from "./dueDate.js";
 
-// The alert appears the moment the vaccine's DUE DAY starts (12:00 AM in this time zone)
-// and stays until the vaccine is given. Pakistan has no daylight saving, so the offset is fixed.
+// An alert exists for EVERY vaccine that is not given yet: overdue, due today AND due in the future.
+// The alerts page shows the alerts of one due day at a time, so a doctor can open any date, also an upcoming one.
+// A day starts at 12:00 AM in this time zone. Pakistan has no daylight saving, so the offset is fixed.
 export const ALERT_TIMEZONE = "Asia/Karachi";
 const ALERT_TZ_OFFSET = "+05:00";
 
@@ -37,10 +38,6 @@ const toDayString = (date) => {
   return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
-// 12:00 AM (start) of the calendar day the vaccine is due on, in ALERT_TIMEZONE
-export const getDueDayStart = (dueDate) =>
-  new Date(`${toDayString(dueDate)}T00:00:00${ALERT_TZ_OFFSET}`);
-
 // Today's date as "YYYY-MM-DD" in ALERT_TIMEZONE (the default of the alerts date filter)
 export const getTodayString = () => toDayString(new Date());
 
@@ -52,11 +49,6 @@ export const getDayRange = (dateString) => {
   if (isNaN(start.getTime()) || toDayString(start) !== dateString) return null;
   return { start, end: new Date(start.getTime() + ONE_DAY_MS) };
 };
-
-// true once the due day has started. Stays true on that whole day AND after it (overdue),
-// so a vaccine that is already due or past due shows an alert immediately.
-export const isAlertWindowOpen = (dueDate, nowMs = Date.now()) =>
-  nowMs >= getDueDayStart(dueDate).getTime();
 
 const text = (v) => String(v ?? "");
 
@@ -77,7 +69,7 @@ const isUnchanged = (current, next) =>
  *   syncAlerts({ doctorId })          -> one doctor's patients
  *
  *  1. Read the existing alerts of this scope once.
- *  2. For every patient + vaccine that is NOT given and whose due day has started (or passed):
+ *  2. For every patient + vaccine that is NOT given (whatever its due date: past, today or future):
  *       - alert missing         -> create it
  *       - alert exists, changed -> update it
  *       - alert exists, same    -> do nothing (no write)
@@ -145,8 +137,6 @@ export const syncAlerts = async (scope = {}) => {
         const dueDate =
           rescheduledDue.get(String(vaccine._id)) ?? calculateDueDate(patient.dateOfBirth, vaccine.recommendedAge);
         if (!dueDate) continue; // date of birth is not a valid date -> cannot calculate
-
-        if (!isAlertWindowOpen(dueDate, startedAt)) continue; // due day has not started yet
 
         const key = `${patient._id}:${vaccine._id}`;
         validKeys.add(key);

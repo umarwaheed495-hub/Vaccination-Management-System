@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { BellOff, Clock, Loader2, Mail, TriangleAlert, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BellOff, CalendarClock, Clock, Loader2, Mail, TriangleAlert, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
@@ -60,8 +60,9 @@ const setAlertStatus = (view, id, status) => ({
   alerts: view.alerts.map((a) => (a._id === id ? { ...a, status } : a)),
 });
 
-// How urgent is this alert right now? Alerts exist from the start of the due day onwards.
-// Overdue -> red warning icon, due today -> amber clock icon.
+// How urgent is this alert right now? Alerts exist for every vaccine that is not given, so the date filter can
+// show past, today and future days.
+// Overdue -> red warning icon, due today -> amber clock icon, upcoming -> blue calendar icon.
 const getUrgency = (dueIso, now) => {
   const daysLate = Math.round((startOfDay(now) - startOfDay(new Date(dueIso).getTime())) / DAY);
 
@@ -71,6 +72,16 @@ const getUrgency = (dueIso, now) => {
       label: `Overdue by ${plural(daysLate, 'day')}`,
       border: 'border-l-red-500',
       iconBox: 'bg-red-500/10 text-red-400 border-red-500/30',
+    };
+  }
+
+  if (daysLate < 0) {
+    const daysAhead = -daysLate;
+    return {
+      icon: CalendarClock,
+      label: daysAhead === 1 ? 'Due tomorrow' : `Due in ${plural(daysAhead, 'day')}`,
+      border: 'border-l-blue-500',
+      iconBox: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
     };
   }
 
@@ -346,7 +357,9 @@ const AlertsView = () => {
     }
   };
 
-  const isToday = date === getLocalToday();
+  const today = getLocalToday();
+  const isToday = date === today;
+  const isFuture = date > today;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -403,7 +416,11 @@ const AlertsView = () => {
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3 px-4 text-center bg-slate-900 border border-slate-800 rounded-2xl">
           <BellOff className="w-12 h-12 text-slate-600" />
           <p className="text-base font-semibold text-slate-300">
-            {isToday ? 'No vaccines are due today.' : `No alerts for ${formatLongDate(date)}.`}
+            {isToday
+              ? 'No vaccines are due today.'
+              : isFuture
+                ? `No vaccines are scheduled for ${formatLongDate(date)}.`
+                : `No alerts for ${formatLongDate(date)}.`}
           </p>
         </div>
       ) : (
@@ -429,7 +446,7 @@ const AlertsView = () => {
                   isUnread ? 'bg-slate-900' : 'bg-slate-900/50'
                 }`}
               >
-                {/* Urgency icon: red warning = overdue, amber clock = due today */}
+                {/* Urgency icon: red warning = overdue, amber clock = due today, blue calendar = upcoming */}
                 <div
                   role="img"
                   aria-label={urgency.label}
