@@ -20,7 +20,6 @@ const createClinic = asyncHandler(async (req, res) => {
     address,
     city,
     consultationFee,
-    totalBeds,
     workingDays,
     startTime,
     endTime,
@@ -40,7 +39,6 @@ const createClinic = asyncHandler(async (req, res) => {
     address,
     city,
     consultationFee,
-    totalBeds,
     workingDays,
     startTime,
     endTime,
@@ -91,7 +89,8 @@ const getMyClinics = asyncHandler(async (req, res) => {
     },
     {
       $project: {
-        patientsList: 0 // Heavy array ko response se remove kar diya taake speed fast rahe
+        patientsList: 0, // Heavy array ko response se remove kar diya taake speed fast rahe
+        totalBeds: 0 // Removed field: old clinic documents may still carry it, so never send it to the client
       }
     }
   ]);
@@ -111,7 +110,9 @@ const updateClinic = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Clinic not found or unauthorized access.");
   }
 
-  const { workingDays, startTime, endTime } = req.body;
+  // The beds field was removed from the clinic: drop it from the payload so it can never be written again
+  const { totalBeds, ...updateData } = req.body;
+  const { workingDays, startTime, endTime } = updateData;
 
   // Agar update mein time ya working days diye gaye hain, toh overlap check karein
   if (startTime || endTime || workingDays) {
@@ -146,7 +147,7 @@ const updateClinic = asyncHandler(async (req, res) => {
 
    const updatedClinic = await Clinic.findByIdAndUpdate(
     clinicId,
-    { $set: req.body },
+    { $set: updateData },
     { returnDocument: "after", runValidators: true }
   );
 

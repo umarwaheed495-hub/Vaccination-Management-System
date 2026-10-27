@@ -69,7 +69,6 @@ const EditClinic = () => {
     address: preloadedClinic?.address || '',
     city: preloadedClinic?.city || '',
     consultationFee: preloadedClinic?.consultationFee ?? '',
-    totalBeds: preloadedClinic?.totalBeds ?? '',
     workingDays: mapDays(preloadedClinic?.workingDays || []),
     startTime: preloadedClinic?.startTime || '',
     endTime: preloadedClinic?.endTime || '',
@@ -123,7 +122,6 @@ const EditClinic = () => {
             address: clinicData.address || '',
             city: clinicData.city || '',
             consultationFee: clinicData.consultationFee ?? '',
-            totalBeds: clinicData.totalBeds ?? '',
             workingDays: mapDays(clinicData.workingDays || []),
             startTime: clinicData.startTime || '',
             endTime: clinicData.endTime || '',
@@ -187,7 +185,6 @@ const EditClinic = () => {
         {
           ...formData,
           consultationFee: Number(formData.consultationFee),
-          totalBeds: Number(formData.totalBeds),
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -309,7 +306,7 @@ const EditClinic = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5">
             <div>
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Consultation Fee (PKR) *</label>
               <input
@@ -317,18 +314,6 @@ const EditClinic = () => {
                 name="consultationFee"
                 required
                 value={formData.consultationFee}
-                onChange={handleChange}
-                className="w-full bg-[#060b18] border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Total Beds *</label>
-              <input
-                type="number"
-                name="totalBeds"
-                required
-                value={formData.totalBeds}
                 onChange={handleChange}
                 className="w-full bg-[#060b18] border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition"
               />

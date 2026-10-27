@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Building2, MapPin, Phone, Mail, Clock,
-  Calendar, DollarSign, Bed, Pencil, Trash2, Loader2, Users
+  Calendar, DollarSign, Pencil, Trash2, Loader2, Users
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -192,7 +192,7 @@ const ClinicView = () => {
                           {clinic.clinicName || clinic.name || 'Clinic'}
                         </h3>
                         <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5 truncate">
-                          <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
                           <span className="truncate">{clinic.address}{clinic.city ? `, ${clinic.city}` : ''}</span>
                         </p>
                       </div>
@@ -227,17 +227,17 @@ const ClinicView = () => {
 
                   <div className="bg-[#060b18]/60 border border-slate-800/50 rounded-xl p-3 space-y-2 text-xs text-slate-300">
                     <div className="flex items-center gap-2 text-slate-300 min-w-0">
-                      <Phone className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                       <span className="truncate">{clinic.phone || 'N/A'}</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 min-w-0">
-                      <Mail className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <Mail className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                       <span className="truncate">{clinic.email || 'N/A'}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 text-xs text-slate-300 flex-wrap">
-                    <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span className="text-slate-400">Timing:</span>
                     <span className="font-semibold text-slate-100">
                       {clinic.startTime && clinic.endTime
@@ -247,7 +247,7 @@ const ClinicView = () => {
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <Calendar className="w-3.5 h-3.5 text-blue-400 shrink-0 mr-1" />
+                    <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0 mr-1" />
                     {shortDays.map((day, idx) => (
                       <span
                         key={idx}
@@ -261,7 +261,7 @@ const ClinicView = () => {
                   {/* Total Patients Badge (Backend Aggregation Result) */}
                   <div className="flex items-center justify-between pt-1 text-xs bg-slate-900/50 px-3 py-2 rounded-xl border border-slate-800/60">
                     <div className="flex items-center gap-1.5 text-slate-300">
-                      <Users className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <Users className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                       <span className="text-slate-400">Total Patients:</span>
                     </div>
                     <span className="font-bold text-blue-400">{totalPatientsCount}</span>
@@ -269,27 +269,14 @@ const ClinicView = () => {
 
                   <div className="flex items-center justify-between pt-1 text-xs">
                     <div className="flex items-center gap-1 font-medium">
-                      <DollarSign className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <DollarSign className="w-3.5 h-3.5 text-green-500 shrink-0" />
                       <span className="text-slate-400">Fee:</span>
                       <span className="text-emerald-400 font-bold">PKR {clinic.consultationFee || 1000}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-slate-300">
-                      <Bed className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                      <span className="text-slate-400">Beds:</span>
-                      <span className="font-bold text-slate-100">{clinic.totalBeds || 0}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-3 border-t border-slate-800/80 space-y-2">
-                  <button
-                    onClick={() => navigate(`/dashboard/clinic/${clinicId}`)}
-                    className="w-full bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 font-medium text-xs h-9 rounded-xl flex items-center justify-center gap-2 transition"
-                  >
-                    <span>View Details & Appointments</span>
-                  </button>
-
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => navigate(`/dashboard/edit-clinic/${clinicId}`, { state: { clinicData: clinic } })}

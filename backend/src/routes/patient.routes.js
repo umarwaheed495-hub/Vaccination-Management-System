@@ -3,6 +3,7 @@ import {
   addPatient,
   getPatientsByClinic,
   getPatientVaccinationCard,
+  getVaccinationBill,
   updatePatientVaccineStatus,
   rescheduleVaccine,
   rescheduleVaccineGroup,
@@ -22,6 +23,9 @@ router.route("/clinic/:clinicId").get(verifyJWT, authorizeRoles("doctor", "admin
 
 // 3. Get Patient Vaccination Card (On-demand due date calculation & schedule sync)
 router.route("/vaccination-card/:patientId").get(verifyJWT, authorizeRoles("doctor", "admin"), getPatientVaccinationCard);
+
+// 3a. Bill for a group of vaccines (clinic fee is added only if at least one is "Given")
+router.route("/vaccination-card/:patientId/bill").get(verifyJWT, authorizeRoles("doctor", "admin"), getVaccinationBill);
 
 // 4. Update Patient Vaccine Status & Given Date (New Route added)
 router.route("/vaccination-card/:patientId/vaccine/:vaccineId").patch(verifyJWT, authorizeRoles("doctor", "admin"), updatePatientVaccineStatus);

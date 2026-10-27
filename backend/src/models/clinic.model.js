@@ -37,11 +37,6 @@ const clinicSchema = new Schema(
             required: [true, "Fee is required"],
             min: 0
         },
-        totalBeds: {
-            type: Number,
-            required: [true, "Total beds count is required"],
-            min: 0
-        },
         workingDays: {
             type: [String],
             required: true,

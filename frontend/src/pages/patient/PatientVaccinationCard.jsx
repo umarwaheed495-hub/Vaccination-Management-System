@@ -48,7 +48,7 @@ const PatientVaccinationCard = () => {
   const [patientData, setPatientData] = useState(null);
   const [vaccines, setVaccines] = useState([]);
   const [updatingId, setUpdatingId] = useState(null);
-  const [brandPrices, setBrandPrices] = useState(null); // brandName -> price; null until the prices have loaded
+  const [downloadingKey, setDownloadingKey] = useState(null); // due-date group whose PDF is being prepared
   const [rescheduleTarget, setRescheduleTarget] = useState(null); // { items, skipped } while the dialog is open
   const [rescheduling, setRescheduling] = useState(false);
 
@@ -77,30 +77,21 @@ const PatientVaccinationCard = () => {
     }
   };
 
-  // Fetch vaccine brand prices (brandName -> price). Uses the dedicated prices endpoint: the brands list
-  // is paginated and returns { brands, pagination }, so it cannot be used to look up every brand's price.
-  const fetchBrandPrices = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/v1/vaccine-brands/prices', {
-        headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true,
-      });
-
-      const map = {};
-      (response.data?.data || []).forEach((b) => {
-        map[b.brandName] = b.price;
-      });
-      setBrandPrices(map);
-    } catch (error) {
-      console.error("Failed to fetch brand prices:", error);
-    }
+  // Fetch the bill of one due-date group from the backend. The backend decides the prices, the clinic fee
+  // (added only when at least one vaccine is "Given") and the total, so the PDF only displays them.
+  const fetchGroupBill = async (groupItems) => {
+    const token = localStorage.getItem('token');
+    const response = await axios.get(`/api/v1/patients/vaccination-card/${patientId}/bill`, {
+      params: { vaccineIds: groupItems.map((item) => item._id).join(',') },
+      headers: { Authorization: `Bearer ${token}` },
+      withCredentials: true,
+    });
+    return response.data?.data;
   };
 
   useEffect(() => {
     if (patientId) {
       fetchVaccinationCard();
-      fetchBrandPrices();
     }
   }, [patientId]);
 
@@ -175,7 +166,7 @@ const PatientVaccinationCard = () => {
   };
 
   // 3. Build the PDF document (used by the PDF download)
-  const buildGroupPDF = (dueDate, groupItems) => {
+  const buildGroupPDF = (dueDate, groupItems, bill) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -249,7 +240,9 @@ const PatientVaccinationCard = () => {
     // ---------- Table Data ----------
     const tableColumn = ["Vaccine Name", "Brand", "Status", "Given Date", "Price (Rs)"];
     const tableRows = [];
-    let totalPrice = 0;
+    const priceById = new Map((bill?.items || []).map((b) => [String(b.vaccineId), Number(b.price) || 0]));
+    const clinicFee = Number(bill?.clinicFee) || 0; // 0 when no vaccine is Given yet
+    const totalPrice = Number(bill?.totalBill) || 0; // vaccines + clinic fee, calculated by the backend
 
     groupItems.forEach((item) => {
       const vName = item.scheduleId?.name || item.vaccineName || 'Unknown Vaccine';
@@ -258,8 +251,7 @@ const PatientVaccinationCard = () => {
 
       // Price sirf Given vaccine ki show hogi
       const isGiven = item.status === 'Given';
-      const price = isGiven ? Number(brandPrices[item.brandName] ?? 0) : null;
-      if (isGiven) totalPrice += price;
+      const price = isGiven ? priceById.get(String(item._id)) ?? 0 : null;
 
       tableRows.push([
         vName,
@@ -275,7 +267,19 @@ const PatientVaccinationCard = () => {
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      foot: [["", "", "", "Total", `Rs ${totalPrice.toLocaleString('en-US')}`]],
+      foot: [
+        // The clinic fee row appears only when the backend added it (at least one vaccine is Given)
+        ...(clinicFee > 0
+          ? [[
+              { content: "Clinic Fee", colSpan: 4, styles: { halign: 'right' } },
+              `Rs ${clinicFee.toLocaleString('en-US')}`,
+            ]]
+          : []),
+        [
+          { content: "Total", colSpan: 4, styles: { halign: 'right' } },
+          `Rs ${totalPrice.toLocaleString('en-US')}`,
+        ],
+      ],
       startY: boxY + boxH + 8,
       margin: { top: 20, left: marginX, right: marginX, bottom: 22 },
       theme: 'striped',
@@ -320,6 +324,7 @@ const PatientVaccinationCard = () => {
       `Report Date: ${new Date().toLocaleDateString()}`,
       "---",
       ...tableRows.map((r, i) => `${i + 1}. ${r[0]} | ${r[1]} | ${r[2]} | ${r[3]} | ${r[4] === '-' ? '-' : `Rs ${r[4]}`}`),
+      ...(clinicFee > 0 ? [`Clinic Fee: Rs ${clinicFee.toLocaleString('en-US')}`] : []),
       `Total: Rs ${totalPrice.toLocaleString('en-US')}`,
     ].join('\n');
 
@@ -329,6 +334,7 @@ const PatientVaccinationCard = () => {
       `Patient: ${patientData?.patientName || 'N/A'}`,
       `Due Date: ${dueDate}`,
       ...tableRows.map((r, i) => `${i + 1}. ${r[0]} | ${r[2]}`),
+      ...(clinicFee > 0 ? [`Clinic Fee: Rs ${clinicFee.toLocaleString('en-US')}`] : []),
       `Total: Rs ${totalPrice.toLocaleString('en-US')}`,
     ].join('\n');
 
@@ -381,20 +387,30 @@ const PatientVaccinationCard = () => {
   };
 
   // 3a. PDF Download Handler for a Specific Due Date Group
-  const downloadGroupPDF = (dueDate, groupItems) => {
-    // Without the prices the report would show "0" for every given vaccine, so do not create a wrong PDF
-    if (brandPrices === null) {
-      toast.error('Brand prices are not loaded yet. Please refresh the page and try again.');
-      return;
-    }
+  const downloadGroupPDF = async (dueDate, groupItems) => {
+    if (downloadingKey) return; // a PDF is already being prepared
 
     try {
-      const doc = buildGroupPDF(dueDate, groupItems);
+      setDownloadingKey(dueDate);
+
+      // Without the bill the report would show wrong prices/total, so do not create a wrong PDF
+      let bill;
+      try {
+        bill = await fetchGroupBill(groupItems);
+      } catch (error) {
+        console.error("Failed to fetch vaccination bill:", error);
+        toast.error(error.response?.data?.message || "Failed to calculate the bill. Please try again.");
+        return;
+      }
+
+      const doc = buildGroupPDF(dueDate, groupItems, bill);
       doc.save(`Vaccination_Report_${dueDate.replace(/\//g, '-')}.pdf`);
       toast.success(`PDF downloaded for Due Date: ${dueDate}`);
     } catch (err) {
       console.error("Failed to generate PDF:", err);
       toast.error("Failed to download PDF report.");
+    } finally {
+      setDownloadingKey(null);
     }
   };
 
@@ -546,11 +562,12 @@ const PatientVaccinationCard = () => {
                         </button>
                         <button
                           onClick={() => downloadGroupPDF(dueDate, groupItems)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl transition text-xs font-medium tracking-normal normal-case"
+                          disabled={downloadingKey !== null}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl transition text-xs font-medium tracking-normal normal-case disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600/20"
                           title="Download status report for this due date"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          <span>PDF Report</span>
+                          <span>{downloadingKey === dueDate ? 'Preparing...' : 'PDF Report'}</span>
                         </button>
                       </div>
                     </div>

@@ -165,6 +165,93 @@ const getPatientVaccinationCard = asyncHandler(async (req, res) => {
 });
 
 // =========================================================================
+// 3a. GET BILL FOR A GROUP OF VACCINES (used by the vaccination card PDF)
+// GET /vaccination-card/:patientId/bill?vaccineIds=id1,id2,...
+// The clinic (consultation) fee is added to the total ONLY when at least one of the
+// requested vaccines has status "Given". If none is given yet, clinicFee is 0.
+// =========================================================================
+const getVaccinationBill = asyncHandler(async (req, res) => {
+  const { patientId } = req.params;
+  const doctorId = req.doctor?._id || req.user?._id;
+
+  if (!doctorId) {
+    throw new ApiError(401, "Unauthorized request. Doctor identity missing.");
+  }
+
+  const vaccineIds = [
+    ...new Set(
+      String(req.query.vaccineIds || "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+    ),
+  ];
+  if (vaccineIds.length === 0) {
+    throw new ApiError(400, "vaccineIds query parameter is required.");
+  }
+
+  const patient = await Patient.findOne({ _id: patientId, doctorId })
+    .select("patientVaccines clinicId")
+    .populate("clinicId", "consultationFee")
+    .lean();
+  if (!patient) {
+    throw new ApiError(404, "Patient not found or unauthorized access.");
+  }
+
+  // A vaccine can be named by its card-entry id or by its schedule id (same as the other card routes)
+  const entryByRef = new Map();
+  patient.patientVaccines.forEach((entry) => {
+    entryByRef.set(String(entry._id), entry);
+    if (entry.scheduleId) entryByRef.set(String(entry.scheduleId), entry);
+  });
+
+  const entries = new Map(); // one entry per vaccine, even if it was named twice
+  for (const ref of vaccineIds) {
+    const entry = entryByRef.get(ref);
+    if (!entry) {
+      throw new ApiError(404, "Vaccine record not found in patient's card.");
+    }
+    entries.set(String(entry._id), entry);
+  }
+
+  const isGiven = (entry) => String(entry.status || "").toLowerCase() === "given";
+
+  // Prices of the brands of the given vaccines (brandName -> price), same lookup the card used before
+  const givenBrandNames = [
+    ...new Set([...entries.values()].filter(isGiven).map((e) => e.brandName).filter(Boolean)),
+  ];
+  const brandDocs = givenBrandNames.length
+    ? await VaccineBrand.find({ doctorId, brandName: { $in: givenBrandNames } })
+        .select("brandName price -_id")
+        .lean()
+    : [];
+  const priceByBrand = new Map(brandDocs.map((b) => [b.brandName, Number(b.price) || 0]));
+
+  const items = [...entries.values()].map((entry) => {
+    const given = isGiven(entry);
+    return {
+      vaccineId: String(entry._id),
+      status: entry.status,
+      brandName: entry.brandName || "",
+      price: given ? priceByBrand.get(entry.brandName) ?? 0 : 0, // only Given vaccines are billed
+    };
+  });
+
+  const hasGivenVaccine = items.some((item) => String(item.status || "").toLowerCase() === "given");
+  const vaccinesTotal = items.reduce((sum, item) => sum + item.price, 0);
+  const clinicFee = hasGivenVaccine ? Number(patient.clinicId?.consultationFee) || 0 : 0;
+  const totalBill = vaccinesTotal + clinicFee;
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      { items, hasGivenVaccine, vaccinesTotal, clinicFee, totalBill },
+      "Vaccination bill calculated successfully."
+    )
+  );
+});
+
+// =========================================================================
 // 4. UPDATE PATIENT VACCINE STATUS, BRAND NAME & GIVEN DATE (With Inventory Sync)
 // =========================================================================
 const updatePatientVaccineStatus = asyncHandler(async (req, res) => {
@@ -549,6 +636,7 @@ export {
   addPatient,
   getPatientsByClinic,
   getPatientVaccinationCard,
+  getVaccinationBill,
   updatePatientVaccineStatus,
   rescheduleVaccine,
   rescheduleVaccineGroup,

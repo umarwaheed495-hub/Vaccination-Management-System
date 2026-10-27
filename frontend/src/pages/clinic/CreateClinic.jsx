@@ -29,7 +29,6 @@ const CreateClinic = () => {
     address: '',
     city: '',
     consultationFee: '',
-    totalBeds: '',
     workingDays: [],
     startTime: '',
     endTime: '',
@@ -76,7 +75,6 @@ const CreateClinic = () => {
         {
           ...formData,
           consultationFee: Number(formData.consultationFee),
-          totalBeds: Number(formData.totalBeds),
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -222,7 +220,7 @@ const CreateClinic = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5">
             <div>
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Consultation Fee (PKR) *</label>
               <input
@@ -232,19 +230,6 @@ const CreateClinic = () => {
                 value={formData.consultationFee}
                 onChange={handleChange}
                 placeholder="Enter consultation fee"
-                className="w-full bg-[#060b18] border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Total Beds *</label>
-              <input
-                type="number"
-                name="totalBeds"
-                required
-                value={formData.totalBeds}
-                onChange={handleChange}
-                placeholder="Enter total number of beds"
                 className="w-full bg-[#060b18] border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition"
               />
             </div>
