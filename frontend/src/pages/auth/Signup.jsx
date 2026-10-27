@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -10,16 +10,42 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2, ChevronDown, Check } from 'lucide-react'
 import { toast } from 'sonner'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import axios from 'axios'
+
+const COUNTRIES = [
+    { iso: "PK", flag: "🇵🇰", code: "+92", label: "PK" },
+    { iso: "US", flag: "🇺🇸", code: "+1", label: "US" },
+    { iso: "GB", flag: "🇬🇧", code: "+44", label: "UK" },
+    { iso: "AE", flag: "🇦🇪", code: "+971", label: "UAE" },
+    { iso: "SA", flag: "🇸🇦", code: "+966", label: "KSA" },
+    { iso: "IN", flag: "🇮🇳", code: "+91", label: "IN" },
+    { iso: "AU", flag: "🇦🇺", code: "+61", label: "AU" },
+    { iso: "CA", flag: "🇨🇦", code: "+1", label: "CA" },
+    { iso: "DE", flag: "🇩🇪", code: "+49", label: "DE" },
+    { iso: "FR", flag: "🇫🇷", code: "+33", label: "FR" },
+    { iso: "CN", flag: "🇨🇳", code: "+86", label: "CN" },
+    { iso: "JP", flag: "🇯🇵", code: "+81", label: "JP" },
+    { iso: "TR", flag: "🇹🇷", code: "+90", label: "TR" },
+    { iso: "MY", flag: "🇲🇾", code: "+60", label: "MY" },
+    { iso: "ID", flag: "🇮🇩", code: "+62", label: "ID" },
+    { iso: "EG", flag: "🇪🇬", code: "+20", label: "EG" },
+    { iso: "ZA", flag: "🇿🇦", code: "+27", label: "ZA" },
+]
 
 const Signup = () => {
     const navigate = useNavigate()
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
+
+    const [isCountryOpen, setIsCountryOpen] = useState(false)
+    const [selectedIso, setSelectedIso] = useState("PK")
+    const countryRef = useRef(null)
+
+    const selectedCountry = COUNTRIES.find((c) => c.iso === selectedIso) || COUNTRIES[0]
 
     const [formData, setFormData] = useState({
         name: "",
@@ -33,12 +59,36 @@ const Signup = () => {
         pmdcNumber: ""
     })
 
+    // Close the dropdown on outside click or Escape
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (countryRef.current && !countryRef.current.contains(e.target)) {
+                setIsCountryOpen(false)
+            }
+        }
+        const handleEscape = (e) => {
+            if (e.key === "Escape") setIsCountryOpen(false)
+        }
+        document.addEventListener("mousedown", handleClickOutside)
+        document.addEventListener("keydown", handleEscape)
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside)
+            document.removeEventListener("keydown", handleEscape)
+        }
+    }, [])
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData((prev) => ({
             ...prev,
             [name]: value
         }))
+    }
+
+    const handleCountrySelect = (country) => {
+        setSelectedIso(country.iso)
+        setFormData((prev) => ({ ...prev, countryCode: country.code }))
+        setIsCountryOpen(false)
     }
 
     const handleSubmit = async (e) => {
@@ -77,7 +127,8 @@ const Signup = () => {
                     <p className='text-slate-400'>Vaccination Management System</p>
                 </div>
 
-                <Card className="w-full bg-slate-900 border-slate-800 text-slate-100 overflow-hidden">
+                {/* overflow-hidden removed so the dropdown list isn't clipped by the card */}
+                <Card className="w-full bg-slate-900 border-slate-800 text-slate-100">
                     <CardHeader className='space-y-1 text-center'>
                         <CardTitle className='text-2xl text-blue-400'>Create Account</CardTitle>
                         <CardDescription className='text-slate-400'>
@@ -149,33 +200,55 @@ const Signup = () => {
                                 <div className="grid gap-2">
                                     <Label htmlFor="phoneNumber">Phone Number *</Label>
                                     <div className="flex gap-2">
-                                        {/* Country Code Dropdown */}
-                                        <select
-                                            id="countryCode"
-                                            name="countryCode"
-                                            value={formData.countryCode}
-                                            onChange={handleChange}
-                                            required
-                                            className="w-28 bg-slate-800/60 border border-slate-700 text-white rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                                        >
-                                            <option value="+92" className="bg-slate-900 text-white">🇵🇰 +92 (PK)</option>
-                                            <option value="+1" className="bg-slate-900 text-white">🇺🇸 +1 (US)</option>
-                                            <option value="+44" className="bg-slate-900 text-white">🇬🇧 +44 (UK)</option>
-                                            <option value="+971" className="bg-slate-900 text-white">🇦🇪 +971 (UAE)</option>
-                                            <option value="+966" className="bg-slate-900 text-white">🇸🇦 +966 (KSA)</option>
-                                            <option value="+91" className="bg-slate-900 text-white">🇮🇳 +91 (IN)</option>
-                                            <option value="+61" className="bg-slate-900 text-white">🇦🇺 +61 (AU)</option>
-                                            <option value="+1" className="bg-slate-900 text-white">🇨🇦 +1 (CA)</option>
-                                            <option value="+49" className="bg-slate-900 text-white">🇩🇪 +49 (DE)</option>
-                                            <option value="+33" className="bg-slate-900 text-white">🇫🇷 +33 (FR)</option>
-                                            <option value="+86" className="bg-slate-900 text-white">🇨🇳 +86 (CN)</option>
-                                            <option value="+81" className="bg-slate-900 text-white">🇯🇵 +81 (JP)</option>
-                                            <option value="+90" className="bg-slate-900 text-white">🇹🇷 +90 (TR)</option>
-                                            <option value="+60" className="bg-slate-900 text-white">🇲🇾 +60 (MY)</option>
-                                            <option value="+62" className="bg-slate-900 text-white">🇮🇩 +62 (ID)</option>
-                                            <option value="+20" className="bg-slate-900 text-white">🇪🇬 +20 (EG)</option>
-                                            <option value="+27" className="bg-slate-900 text-white">🇿🇦 +27 (ZA)</option>
-                                        </select>
+                                        {/* Custom scrollable country code dropdown */}
+                                        <div className="relative shrink-0" ref={countryRef}>
+                                            <button
+                                                type="button"
+                                                id="countryCode"
+                                                aria-haspopup="listbox"
+                                                aria-expanded={isCountryOpen}
+                                                onClick={() => setIsCountryOpen((open) => !open)}
+                                                className="flex h-9 w-28 items-center justify-between gap-1 rounded-md border border-slate-700 bg-slate-800/60 px-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                                            >
+                                                <span className="truncate">
+                                                    {selectedCountry.flag} {selectedCountry.code}
+                                                </span>
+                                                <ChevronDown
+                                                    className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isCountryOpen ? "rotate-180" : ""}`}
+                                                />
+                                            </button>
+
+                                            {isCountryOpen && (
+                                                <ul
+                                                    role="listbox"
+                                                    className="absolute left-0 top-full z-50 mt-1 max-h-60 w-56 overflow-y-auto overscroll-contain rounded-md border border-slate-700 bg-slate-900 py-1 shadow-xl shadow-black/40
+                                                        [&::-webkit-scrollbar]:w-2
+                                                        [&::-webkit-scrollbar-track]:bg-slate-900
+                                                        [&::-webkit-scrollbar-thumb]:rounded-full
+                                                        [&::-webkit-scrollbar-thumb]:bg-slate-600
+                                                        hover:[&::-webkit-scrollbar-thumb]:bg-slate-500"
+                                                    style={{ scrollbarWidth: "thin", scrollbarColor: "#475569 #0f172a" }}
+                                                >
+                                                    {COUNTRIES.map((country) => {
+                                                        const isSelected = country.iso === selectedIso
+                                                        return (
+                                                            <li
+                                                                key={country.iso}
+                                                                role="option"
+                                                                aria-selected={isSelected}
+                                                                onClick={() => handleCountrySelect(country)}
+                                                                className={`flex cursor-pointer items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-slate-800 ${isSelected ? "bg-slate-800/70 text-blue-400" : "text-slate-100"}`}
+                                                            >
+                                                                <span>
+                                                                    {country.flag} {country.code} ({country.label})
+                                                                </span>
+                                                                {isSelected && <Check className="h-4 w-4 text-blue-400" />}
+                                                            </li>
+                                                        )
+                                                    })}
+                                                </ul>
+                                            )}
+                                        </div>
 
                                         {/* Phone Input */}
                                         <Input
@@ -185,7 +258,7 @@ const Signup = () => {
                                             onChange={handleChange}
                                             placeholder="Enter Your Phone Number"
                                             required
-                                            className="bg-slate-800/60 border-slate-700 text-white placeholder:text-slate-500"
+                                            className="min-w-0 flex-1 bg-slate-800/60 border-slate-700 text-white placeholder:text-slate-500"
                                         />
                                     </div>
                                 </div>
@@ -257,8 +330,7 @@ const Signup = () => {
                             </div>
                         </CardContent>
 
-                        {/* Updated CardFooter styling to match dark theme seamlessly */}
-                        <CardFooter className="bg-slate-900 pt-2 pb-6 px-6 border-t border-slate-800/50">
+                        <CardFooter className="bg-slate-900 pt-2 pb-6 px-6 border-t border-slate-800/50 flex flex-col gap-4 rounded-b-xl">
                             <Button
                                 type="submit"
                                 disabled={isLoading}
@@ -271,6 +343,16 @@ const Signup = () => {
                                     </>
                                 ) : "Register Account"}
                             </Button>
+
+                            <p className="text-center text-sm text-slate-400">
+                                Already have an account?{" "}
+                                <Link
+                                    to="/login"
+                                    className="font-medium text-blue-400 hover:text-blue-300 hover:underline underline-offset-4 transition-colors"
+                                >
+                                    Sign In
+                                </Link>
+                            </p>
                         </CardFooter>
                     </form>
                 </Card>
