@@ -255,7 +255,7 @@ const logoutDoctor = asyncHandler(async (req, res) => {
       },
     },
     {
-      new: true,
+      returnDocument: "after",
     }
   );
 
@@ -410,36 +410,189 @@ const resendOTP = asyncHandler(async (req, res) => {
 // =========================================================================
 // 7. GET CURRENT LOGGED-IN DOCTOR CONTROLLER
 // =========================================================================
+// Whitelist of fields that may ever be sent to the browser (never password, tokens or OTP codes)
+const PROFILE_FIELDS =
+  "name email avatar letterpad countryCode phoneNumber mobileNumberWhatsapp pmdcNumber isEmailVerified createdAt " +
+  "specialization qualifications experienceYears gender city address bio";
+
+const toProfile = (doctor) => ({
+  _id: doctor._id,
+  name: doctor.name,
+  email: doctor.email,
+  avatar: doctor.avatar,
+  letterpad: doctor.letterpad,
+  countryCode: doctor.countryCode,
+  phoneNumber: doctor.phoneNumber,
+  mobileNumberWhatsapp: doctor.mobileNumberWhatsapp,
+  pmdcNumber: doctor.pmdcNumber,
+  isEmailVerified: doctor.isEmailVerified,
+  createdAt: doctor.createdAt,
+  specialization: doctor.specialization,
+  qualifications: doctor.qualifications,
+  experienceYears: doctor.experienceYears,
+  gender: doctor.gender,
+  city: doctor.city,
+  address: doctor.address,
+  bio: doctor.bio,
+});
+
 const getCurrentDoctor = asyncHandler(async (req, res) => {
-  const doctor = req.doctor;
+  const doctor = await Doctor.findById(req.doctor?._id).select(PROFILE_FIELDS).lean();
 
   if (!doctor) {
     throw new ApiError(404, "Doctor profile not found.");
   }
 
-  const dashboardData = {
-    _id: doctor._id,
-    name: doctor.name,
-    email: doctor.email,
-    letterpad: doctor.letterpad,
-    countryCode: doctor.countryCode,
-    phoneNumber: doctor.phoneNumber,
-    mobileNumberWhatsapp: doctor.mobileNumberWhatsapp,
-    pmdcNumber: doctor.pmdcNumber,
-    isEmailVerified: doctor.isEmailVerified,
-    createdAt: doctor.createdAt,
+  return res
+    .status(200)
+    .json(new ApiResponse(200, toProfile(doctor), "Current doctor profile fetched successfully!"));
+});
+
+// =========================================================================
+// 7b. UPDATE CURRENT DOCTOR PROFILE CONTROLLER
+// Only whitelisted fields are read from req.body, and the doctor id always comes from the JWT (req.doctor),
+// so one doctor can never edit another one. email, pmdcNumber, password, role and tokens are NOT editable here.
+// =========================================================================
+const updateDoctorProfile = asyncHandler(async (req, res) => {
+  const body = req.body || {};
+  const updates = {};
+  const clean = (v) => (typeof v === "string" ? v.trim() : v);
+
+  // ---- required fields: may be changed, but never emptied ----
+  if (body.name !== undefined) {
+    const name = clean(body.name);
+    if (!name || typeof name !== "string") throw new ApiError(400, "Validation Failed: Name cannot be empty.");
+    if (name.length > 100) throw new ApiError(400, "Validation Failed: Name is too long (max 100 characters).");
+    updates.name = name;
+  }
+  if (body.letterpad !== undefined) {
+    const letterpad = clean(body.letterpad);
+    if (!letterpad || typeof letterpad !== "string") {
+      throw new ApiError(400, "Validation Failed: Letterpad / Clinic name cannot be empty.");
+    }
+    if (letterpad.length > 150) throw new ApiError(400, "Validation Failed: Letterpad is too long (max 150 characters).");
+    updates.letterpad = letterpad;
+  }
+  if (body.countryCode !== undefined) {
+    const countryCode = clean(body.countryCode);
+    if (!/^\+\d{1,4}$/.test(countryCode || "")) {
+      throw new ApiError(400, "Validation Failed: Country code must look like +92.");
+    }
+    updates.countryCode = countryCode;
+  }
+  if (body.phoneNumber !== undefined) {
+    const phoneNumber = clean(body.phoneNumber);
+    if (!/^\d{6,15}$/.test(phoneNumber || "")) {
+      throw new ApiError(400, "Validation Failed: Phone number must contain 6 to 15 digits only.");
+    }
+    updates.phoneNumber = phoneNumber;
+  }
+
+  // ---- optional text fields: an empty string clears the value ----
+  const optionalText = {
+    mobileNumberWhatsapp: 20,
+    specialization: 100,
+    qualifications: 200,
+    city: 80,
+    address: 250,
+    bio: 500,
   };
+  for (const [field, max] of Object.entries(optionalText)) {
+    if (body[field] === undefined) continue;
+    if (body[field] !== null && typeof body[field] !== "string") {
+      throw new ApiError(400, `Validation Failed: ${field} must be text.`);
+    }
+    const value = clean(body[field]) || "";
+    if (value.length > max) {
+      throw new ApiError(400, `Validation Failed: ${field} is too long (max ${max} characters).`);
+    }
+    updates[field] = value;
+  }
+  if (updates.mobileNumberWhatsapp && !/^\+?\d{6,15}$/.test(updates.mobileNumberWhatsapp)) {
+    throw new ApiError(400, "Validation Failed: WhatsApp number must contain 6 to 15 digits.");
+  }
+
+  if (body.gender !== undefined) {
+    const gender = clean(body.gender) || "";
+    if (!["male", "female", "other", ""].includes(gender)) {
+      throw new ApiError(400, "Validation Failed: Invalid gender value.");
+    }
+    updates.gender = gender;
+  }
+
+  if (body.experienceYears !== undefined) {
+    if (body.experienceYears === "" || body.experienceYears === null) {
+      updates.experienceYears = null;
+    } else {
+      const years = Number(body.experienceYears);
+      if (!Number.isInteger(years) || years < 0 || years > 70) {
+        throw new ApiError(400, "Validation Failed: Experience must be a whole number between 0 and 70.");
+      }
+      updates.experienceYears = years;
+    }
+  }
+
+  if (body.avatar !== undefined) {
+    const avatar = clean(body.avatar) || "";
+    if (avatar) {
+      let parsed;
+      try {
+        parsed = new URL(avatar);
+      } catch {
+        throw new ApiError(400, "Validation Failed: Profile picture must be a valid image URL.");
+      }
+      if (!["http:", "https:"].includes(parsed.protocol) || avatar.length > 500) {
+        throw new ApiError(400, "Validation Failed: Profile picture must be an http(s) URL (max 500 characters).");
+      }
+    }
+    updates.avatar = avatar;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new ApiError(400, "Validation Failed: No valid profile fields were provided.");
+  }
+
+  const doctorId = req.doctor._id;
+
+  // ---- uniqueness checks (against OTHER doctors only) ----
+  if (updates.name) {
+    const taken = await Doctor.findOne({ name: updates.name, _id: { $ne: doctorId } }).select("_id").lean();
+    if (taken) throw new ApiError(409, "Another doctor is already registered with this name.");
+  }
+  if (updates.phoneNumber) {
+    // the phone number is the login identifier, so it must stay unique
+    const taken = await Doctor.findOne({ phoneNumber: updates.phoneNumber, _id: { $ne: doctorId } })
+      .select("_id")
+      .lean();
+    if (taken) throw new ApiError(409, "This phone number is already used by another account.");
+  }
+
+  let updated;
+  try {
+    updated = await Doctor.findByIdAndUpdate(
+      doctorId,
+      { $set: updates },
+      { returnDocument: "after", runValidators: true }
+    ).select(PROFILE_FIELDS);
+  } catch (error) {
+    if (error?.name === "ValidationError") {
+      throw new ApiError(400, Object.values(error.errors)[0]?.message || "Validation Failed.");
+    }
+    if (error?.code === 11000) {
+      throw new ApiError(409, "A doctor with these details already exists.");
+    }
+    throw error;
+  }
+
+  if (!updated) {
+    throw new ApiError(404, "Doctor profile not found.");
+  }
 
   return res
     .status(200)
-    .json(
-      new ApiResponse(
-        200,
-        dashboardData,
-        "Current doctor profile fetched successfully for dashboard!"
-      )
-    );
+    .json(new ApiResponse(200, toProfile(updated), "Profile updated successfully!"));
 });
+
 
 // =========================================================================
 // 8. FORGOT PASSWORD CONTROLLER
@@ -557,6 +710,7 @@ export {
   verifyEmailOTP,
   resendOTP,
   getCurrentDoctor,
+  updateDoctorProfile,
   forgotPassword,
   verifyOtpAndResetPassword
 };

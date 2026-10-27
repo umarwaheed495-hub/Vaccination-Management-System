@@ -144,10 +144,10 @@ const updateClinic = asyncHandler(async (req, res) => {
     }
   }
 
-  const updatedClinic = await Clinic.findByIdAndUpdate(
+   const updatedClinic = await Clinic.findByIdAndUpdate(
     clinicId,
     { $set: req.body },
-    { new: true, runValidators: true }
+    { returnDocument: "after", runValidators: true }
   );
 
   return res

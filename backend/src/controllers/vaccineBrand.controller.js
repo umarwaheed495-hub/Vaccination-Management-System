@@ -1,4 +1,4 @@
-import {VaccineBrand} from '../models/vaccineBrand.model.js';
+import { VaccineBrand } from '../models/vaccineBrand.model.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -61,7 +61,7 @@ const createBrand = asyncHandler(async (req, res) => {
 
     if (existingBrand) {
         throw new ApiError(
-            409, 
+            409,
             `A brand with the name "${brandName.trim()}" under vaccine "${vaccineName.trim()}" from this manufacturer already exists in your inventory.`
         );
     }
@@ -221,7 +221,7 @@ const updateBrand = asyncHandler(async (req, res) => {
     const updatedBrand = await VaccineBrand.findByIdAndUpdate(
         id,
         { $set: updateData },
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
     ).lean();
 
     return res.status(200).json(

@@ -44,6 +44,22 @@ const doctorSchema = new Schema(
       unique: true,
       trim: true,
     },
+    // Profile picture: the URL of an image. Optional - the dashboard shows the doctor's initials while it is empty.
+    avatar: {
+      type: String,
+      trim: true,
+    },
+    // ==========================================
+    // OPTIONAL PROFILE FIELDS (edited on /doctor/profile)
+    // ==========================================
+    specialization: { type: String, trim: true, maxlength: 100 },
+    qualifications: { type: String, trim: true, maxlength: 200 }, // e.g. "MBBS, FCPS (Paediatrics)"
+    experienceYears: { type: Number, min: 0, max: 70 },
+    gender: { type: String, enum: ["male", "female", "other", ""], default: "" },
+    city: { type: String, trim: true, maxlength: 80 },
+    address: { type: String, trim: true, maxlength: 250 },
+    bio: { type: String, trim: true, maxlength: 500 },
+
     role: {
       type: String,
       enum: ["doctor", "admin"],

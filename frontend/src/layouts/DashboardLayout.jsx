@@ -4,6 +4,7 @@ import { LayoutDashboard, Building2, Syringe, Bell, LogOut, CalendarRange, Users
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import axios from 'axios';
+import DoctorProfileCard from '@/components/DoctorProfileCard';
 
 const DashboardLayout = () => {
   const navigate = useNavigate();
@@ -149,6 +150,9 @@ const DashboardLayout = () => {
               </NavLink>
             </nav>
           </div>
+
+          {/* Signed-in doctor, pinned to the bottom of the menu (the aside is flex-col justify-between) */}
+          <DoctorProfileCard />
         </aside>
 
         {/* Dynamic Center Main Content View */}

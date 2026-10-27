@@ -40,6 +40,9 @@ import EditVaccineBrand from './pages/vaccineBrand/EditVaccineBrand';
 // Alert / Notification Pages
 import AlertsView from './pages/alerts/AlertsView';
 
+// Doctor Profile
+import DoctorProfile from './pages/doctor/DoctorProfile';
+
 
 const router = createBrowserRouter([
   // Public Routes
@@ -54,6 +57,12 @@ const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
+      // Doctor Profile (same sidebar layout, but the URL is /doctor/profile)
+      {
+        path: "/doctor",
+        element: <DashboardLayout />,
+        children: [{ path: "profile", element: <DoctorProfile /> }],
+      },
       {
         path: "/dashboard",
         element: <DashboardLayout />,

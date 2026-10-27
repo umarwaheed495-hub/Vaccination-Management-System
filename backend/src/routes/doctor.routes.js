@@ -7,6 +7,7 @@ import {
   verifyEmailOTP,
   resendOTP,
   getCurrentDoctor,
+  updateDoctorProfile,
   forgotPassword,
   verifyOtpAndResetPassword 
   // resetPassword
@@ -55,6 +56,12 @@ router.route("/logout").post(verifyJWT, logoutDoctor);
 // Protected & Role Authorized Route
 router
   .route("/me")
-  .get(verifyJWT, authorizeRoles("doctor"), getCurrentDoctor);
+  .get(verifyJWT, authorizeRoles("doctor", "admin"), getCurrentDoctor); // same roles as the rest of the dashboard
+
+// Doctor Profile: GET (read) and PATCH (update) - the doctor is always the one in the JWT, never an id from the URL
+router
+  .route("/profile")
+  .get(verifyJWT, authorizeRoles("doctor", "admin"), getCurrentDoctor)
+  .patch(verifyJWT, authorizeRoles("doctor", "admin"), limiter, updateDoctorProfile);
 
 export default router;
