@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { BellOff, CalendarClock, Clock, Loader2, Mail, TriangleAlert, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BellOff, Building2, CalendarClock, Clock, Loader2, Mail, TriangleAlert, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
@@ -19,6 +19,7 @@ const EMPTY_VIEW = {
   key: '', // which date + page this data belongs to ('' = nothing loaded yet)
   alerts: [],
   pagination: { page: 1, limit: PAGE_LIMIT, total: 0, totalPages: 1 },
+  hasActiveClinic: true, // false = the doctor has no active clinic, so there is nothing to list (see the empty state)
   error: '',
 };
 
@@ -196,7 +197,7 @@ const AlertsView = () => {
 
   // Loading is derived: the data on screen belongs to another date/page until the new response arrives
   const loading = view.key !== `${date}|${page}`;
-  const { alerts, pagination, error } = view;
+  const { alerts, pagination, hasActiveClinic, error } = view;
 
   // 1. Load the alerts of the selected date + page, and keep them fresh in the background
   useEffect(() => {
@@ -225,7 +226,14 @@ const AlertsView = () => {
         setCooldowns((prev) => syncCooldowns(prev, data.alerts, Date.now()));
 
         // Same data as before -> keep the old state, so React does not re-render for nothing
-        const next = { key, alerts: data.alerts.map(withoutRetry), pagination: data.pagination, error: '' };
+        // The server only returns alerts of the active clinic; hasActiveClinic === false explains an empty list
+        const next = {
+          key,
+          alerts: data.alerts.map(withoutRetry),
+          pagination: data.pagination,
+          hasActiveClinic: data.hasActiveClinic !== false,
+          error: '',
+        };
         setView((prev) => (sameData(prev, next) ? prev : next));
         setNow((prev) => (startOfDay(prev) === startOfDay(Date.now()) ? prev : Date.now()));
       } catch (err) {
@@ -410,6 +418,21 @@ const AlertsView = () => {
             className="border-slate-700 bg-slate-800/50 text-slate-200 hover:bg-slate-800 hover:text-white rounded-xl"
           >
             Try again
+          </Button>
+        </div>
+      ) : !hasActiveClinic ? (
+        <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3 px-4 text-center bg-slate-900 border border-slate-800 rounded-2xl">
+          <Building2 className="w-12 h-12 text-slate-600" />
+          <p className="text-base font-semibold text-slate-300">No active clinic</p>
+          <p className="text-sm text-slate-400 max-w-sm">
+            Alerts are shown only for your active clinic. Activate a clinic to see its vaccine alerts.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => navigate('/dashboard/clinic')}
+            className="border-slate-700 bg-slate-800/50 text-slate-200 hover:bg-slate-800 hover:text-white rounded-xl"
+          >
+            Go to clinics
           </Button>
         </div>
       ) : alerts.length === 0 ? (

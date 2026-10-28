@@ -71,9 +71,10 @@ const alertSchema = new mongoose.Schema(
     }
 );
 
-// The alerts list: one doctor + one day (range on dueDate), ordered by dueDate, patientName, _id.
-// The index has exactly that order, so MongoDB returns the page already sorted (no in-memory sort).
-alertSchema.index({ doctorId: 1, dueDate: 1, patientName: 1, _id: 1 });
+// The alerts list: one doctor + their ACTIVE clinic(s) + one day (range on dueDate), ordered by dueDate, patientName, _id.
+// The index has exactly that order (clinicId is an equality / $in match, so the sort fields still follow it),
+// so MongoDB returns the page already sorted (no in-memory sort) and never reads alerts of inactive clinics.
+alertSchema.index({ doctorId: 1, clinicId: 1, dueDate: 1, patientName: 1, _id: 1 });
 
 // One alert per patient per vaccine. This stops the scheduler from creating duplicates.
 // Partial, so any old-format documents (no patientId) cannot break index creation.

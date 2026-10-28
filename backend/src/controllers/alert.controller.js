@@ -1,5 +1,6 @@
 import { Alert } from "../models/alert.model.js";
 import { Patient } from "../models/patient.model.js";
+import { Clinic } from "../models/clinic.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -18,6 +19,13 @@ const EMAIL_COOLDOWN_MS = EMAIL_COOLDOWN_MINUTES * 60 * 1000;
 // Only the fields AlertsView shows or uses (smaller response, less data read).
 // emailSentAt is only read to work out emailRetryAfterSeconds; it is not sent to the client.
 const ALERT_FIELDS = "patientId patientName vaccineName recommendedAge dueDate status emailSentAt";
+
+// Alerts belong to a clinic (through the patient). Only alerts of an ACTIVE clinic (Clinic.isActive === true) are
+// visible: listed, marked as read or emailed. Alerts of inactive clinics are kept untouched in the database
+// (their read state and email cooldown survive), so they all come back as soon as the clinic is activated again.
+// One small indexed query (Clinic index starts with doctorId). An alert without a clinicId matches no clinic,
+// so it is hidden too (the scheduler fills clinicId in on its next pass).
+const getActiveClinicIds = (doctorId) => Clinic.distinct("_id", { doctorId, isActive: true });
 
 // Bad id (e.g. /alerts/abc) => clear 400 error instead of a 500
 const assertValidId = (id) => {
@@ -57,17 +65,40 @@ const parseDate = (value) => {
 //    Only alerts whose vaccine is due on that date are returned. Without ?date= it is today.
 //    Any date works: a past day (overdue), today, or a future day (upcoming - the scheduler creates the alerts ahead of time).
 //    There are no status / sort options: the order is fixed (due date, then patient name).
+//    Only alerts of the doctor's ACTIVE clinic(s) are returned (see getActiveClinicIds).
 //    Alerts are created automatically by utils/alertScheduler.js
 const getAlerts = asyncHandler(async (req, res) => {
     const doctorId = req.doctor._id;
 
+    // Validate the query first, so a bad request is always a 400, whatever the clinic state is
     const date = parseDate(req.query.date);
     const { start, end } = getDayRange(date);
-
-    const filter = { doctorId, dueDate: { $gte: start, $lt: end } };
-
     const page = parsePositiveInt(req.query.page, 1, "page", MAX_PAGE);
     const limit = Math.min(parsePositiveInt(req.query.limit, DEFAULT_LIMIT, "limit"), MAX_LIMIT);
+
+    // No active clinic => nothing can be shown. Answer straight away, without touching the alerts collection.
+    // "hasActiveClinic" lets the page explain WHY the list is empty.
+    const activeClinicIds = await getActiveClinicIds(doctorId);
+    if (activeClinicIds.length === 0) {
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(
+                    200,
+                    {
+                        alerts: [],
+                        date,
+                        hasActiveClinic: false,
+                        pagination: { page, limit, total: 0, totalPages: 1 }
+                    },
+                    "No active clinic. Activate a clinic to see its alerts."
+                )
+            );
+    }
+
+    // The inactive-clinic filter is part of the query itself, so the page size, the total and the page count
+    // are all correct (nothing is removed after the database returned its page).
+    const filter = { doctorId, clinicId: { $in: activeClinicIds }, dueDate: { $gte: start, $lt: end } };
 
     const alerts = await Alert.find(filter)
         .select(ALERT_FIELDS)
@@ -107,6 +138,7 @@ const getAlerts = asyncHandler(async (req, res) => {
                 {
                     alerts,
                     date,
+                    hasActiveClinic: true,
                     pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) }
                 },
                 "Alerts fetched successfully"
@@ -120,8 +152,11 @@ const markAsRead = asyncHandler(async (req, res) => {
     const { id } = req.params;
     assertValidId(id);
 
+    // An alert of an inactive clinic is hidden from the list, so it is answered like a missing one (404)
+    const activeClinicIds = await getActiveClinicIds(req.doctor._id);
+
     const updatedAlert = await Alert.findOneAndUpdate(
-        { _id: id, doctorId: req.doctor._id },
+        { _id: id, doctorId: req.doctor._id, clinicId: { $in: activeClinicIds } },
         { $set: { status: "read" } },
         { returnDocument: "after" }
     );
@@ -143,8 +178,10 @@ const sendAlertEmail = asyncHandler(async (req, res) => {
     assertValidId(id);
     const doctor = req.doctor;
 
-    // Only the owner of the alert can use it (anyone else gets the same 404 as a missing alert)
-    const alert = await Alert.findOne({ _id: id, doctorId: doctor._id })
+    // Only the owner of the alert can use it, and only while its clinic is active
+    // (anyone else gets the same 404 as a missing alert, and no email goes out for a disabled clinic)
+    const activeClinicIds = await getActiveClinicIds(doctor._id);
+    const alert = await Alert.findOne({ _id: id, doctorId: doctor._id, clinicId: { $in: activeClinicIds } })
         .select("patientId patientName vaccineName dueDate")
         .lean();
     if (!alert) {
